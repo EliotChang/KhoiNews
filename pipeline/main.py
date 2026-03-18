@@ -512,6 +512,7 @@ def _penalty_breakdown(
     stale_story: bool,
     domain_count: int,
     topic_count: int,
+    unique_domains: int = 0,
 ) -> tuple[float, list[str]]:
     del article_host
     combined = f"{title} {description} {post.link}".lower()
@@ -527,7 +528,7 @@ def _penalty_breakdown(
     if min_context_words <= context_words < (min_context_words + 15):
         total_penalty += 0.07
         reasons.append("weak_context_margin")
-    if domain_count > 1:
+    if domain_count > 1 and unique_domains > 1:
         repetitive_domain_penalty = min(0.12, 0.035 * (domain_count - 1))
         total_penalty += repetitive_domain_penalty
         reasons.append("repetitive_domain")
@@ -679,6 +680,8 @@ def select_top_headlines_with_engagement(
         penalties: list[str] = []
         penalty_total = 0.0
 
+        unique_domains = len(domain_counter)
+
         if scoring_enabled:
             timeliness, stale_story = _timeliness_score(published_at=post.published_at, now_utc=now_utc)
             impact = _impact_signal_score(
@@ -720,6 +723,7 @@ def select_top_headlines_with_engagement(
                 stale_story=stale_story,
                 domain_count=domain_counter.get(article_host, 0),
                 topic_count=topic_counter.get(topic_bucket, 0),
+                unique_domains=unique_domains,
             )
             components = {
                 "timeliness": timeliness,
