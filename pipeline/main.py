@@ -287,8 +287,15 @@ def _scheduled_slot_iso(*, anchor_utc: datetime, spacing_hours: int, slot_index:
     return slot_dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+_CJK_CHAR_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
+
+
 def _word_count(value: str) -> int:
-    return len(re.sub(r"\s+", " ", str(value or "").strip()).split())
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    cjk_chars = len(_CJK_CHAR_RE.findall(text))
+    non_cjk = _CJK_CHAR_RE.sub("", text).strip()
+    latin_words = len(non_cjk.split()) if non_cjk else 0
+    return cjk_chars + latin_words
 
 
 def _content_topic_bucket(*, title: str, description: str, extracted_context: str) -> str:
