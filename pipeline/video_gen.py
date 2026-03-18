@@ -902,10 +902,10 @@ def _build_caption_cues(
 _MOUTH_CUE_MERGE_GAP_SECONDS = 0.08
 _CJK_VOICED_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\w]")
 _CJK_CHAR_RE_VIDEO = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
-_SYLLABLE_OPEN_RATIO = 0.72
-_MIN_SYLLABLE_OPEN_SECONDS = 0.08
-_MIN_CUE_HOLD_SECONDS = 0.10
-_MIN_CLOSED_GAP_SECONDS = 0.07
+_SYLLABLE_OPEN_RATIO = 0.55
+_MIN_SYLLABLE_OPEN_SECONDS = 0.06
+_MIN_CUE_HOLD_SECONDS = 0.05
+_MIN_CLOSED_GAP_SECONDS = 0.04
 
 
 def _build_mouth_cues_from_alignment(
@@ -953,11 +953,23 @@ def _build_mouth_cues_from_alignment(
             else:
                 merged_cjk.append((cue_start, cue_end))
 
-        return [
-            {"startSec": s, "endSec": e}
+        final_cjk = [
+            (s, e)
             for s, e in merged_cjk
             if e - s >= _MIN_CUE_HOLD_SECONDS
         ]
+        if final_cjk:
+            durations_ms = [(e - s) * 1000 for s, e in final_cjk]
+            LOGGER.debug(
+                "Mouth cues: %d raw -> %d merged -> %d final (avg %.0fms, min %.0fms, max %.0fms)",
+                len(raw_cues),
+                len(merged_cjk),
+                len(final_cjk),
+                sum(durations_ms) / len(durations_ms),
+                min(durations_ms),
+                max(durations_ms),
+            )
+        return [{"startSec": s, "endSec": e} for s, e in final_cjk]
 
     merged: list[tuple[float, float]] = [voiced_intervals[0]]
     for start, end in voiced_intervals[1:]:

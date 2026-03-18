@@ -72,6 +72,26 @@ const SILENCE_THRESHOLD = 0.003
 const OPEN_THRESHOLD = 0.15
 const SAMPLE_RADIUS = 3
 
+type MouthCue = z.infer<typeof mouthCueSchema>
+
+const isMouthOpen = (cues: MouthCue[], timeSec: number): boolean => {
+  if (cues.length === 0) return false
+  let lo = 0
+  let hi = cues.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1
+    const cue = cues[mid]
+    if (timeSec < cue.startSec) {
+      hi = mid - 1
+    } else if (timeSec > cue.endSec) {
+      lo = mid + 1
+    } else {
+      return true
+    }
+  }
+  return false
+}
+
 function getAmplitudeAtFrame({
   audioData,
   fps,
@@ -152,9 +172,7 @@ export function FishLipSync({
   const currentTimeSec = frame / fps
 
   if (mouthCues.length > 0) {
-    mouthIndex = mouthCues.some(
-      (cue) => currentTimeSec >= cue.startSec && currentTimeSec <= cue.endSec
-    ) ? 1 : 0
+    mouthIndex = isMouthOpen(mouthCues, currentTimeSec) ? 1 : 0
   } else {
     const isInVoicePhase = frame >= voiceStartFrames
     if (isInVoicePhase && audioData) {
