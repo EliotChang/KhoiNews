@@ -25,7 +25,7 @@ from pipeline.db import (
     upsert_publish_job,
 )
 from pipeline.review_state import REVIEW_STATUS_APPROVED, review_defaults, utc_now_iso
-from pipeline.rss_ingest import SourcePostInput
+from pipeline.wj_ingest import SourcePostInput
 from pipeline.text_sanitize import contains_url_text
 from pipeline.voice_gen import VoiceAssetResult
 

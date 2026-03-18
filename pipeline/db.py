@@ -17,7 +17,7 @@ from pipeline.review_state import (
     review_patch_for_approval,
     review_patch_for_regeneration_start,
 )
-from pipeline.rss_ingest import SourcePostInput
+from pipeline.wj_ingest import SourcePostInput
 from pipeline.video_gen import VideoAssetResult
 from pipeline.voice_gen import VoiceAssetResult
 
