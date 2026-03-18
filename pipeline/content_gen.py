@@ -370,7 +370,8 @@ def _build_script_policy(
 
 
 def _extract_source_fact_signals(*, title: str, description: str, article_url: str) -> set[str]:
-    raw_tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9\-_/.:%]*", f"{title} {description} {article_url}")
+    combined = f"{title} {description} {article_url}"
+    raw_tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9\-_/.:%]*", combined)
     signals: set[str] = set()
     for token in raw_tokens:
         normalized = token.strip(".,;:!?()[]{}\"'").lower()
@@ -386,6 +387,15 @@ def _extract_source_fact_signals(*, title: str, description: str, article_url: s
             continue
         if normalized[0].isalpha() and token[:1].isupper():
             signals.add(normalized)
+
+    cjk_runs = re.findall(
+        r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]{2,}",
+        f"{title} {description}",
+    )
+    for run in cjk_runs:
+        if len(run) >= 2:
+            signals.add(run)
+
     if len(signals) >= 4:
         return signals
     for token in raw_tokens:
