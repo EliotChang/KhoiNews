@@ -301,7 +301,7 @@ export function FishLipSync({
             fontWeight: 600,
             textTransform: "uppercase",
             letterSpacing: "0.06em",
-            fontFamily: "Inter, Avenir Next, Helvetica Neue, Arial, sans-serif",
+            fontFamily: "Inter, Avenir Next, Helvetica Neue, Arial, Noto Sans TC, Noto Sans CJK TC, sans-serif",
             textShadow: "0 2px 8px rgba(0,0,0,0.45)",
           }}
         >
@@ -318,7 +318,7 @@ export function FishLipSync({
           fontSize: 24,
           fontWeight: 600,
           letterSpacing: "0.06em",
-          fontFamily: "Inter, Avenir Next, Helvetica Neue, Arial, sans-serif",
+          fontFamily: "Inter, Avenir Next, Helvetica Neue, Arial, Noto Sans TC, Noto Sans CJK TC, sans-serif",
           textShadow: "0 2px 8px rgba(0,0,0,0.45)",
         }}
       >
@@ -347,7 +347,7 @@ export function FishLipSync({
               fontWeight: 900,
               lineHeight: 1.1,
               letterSpacing: "0.01em",
-              fontFamily: "Inter, Avenir Next, Helvetica Neue, Arial, sans-serif",
+              fontFamily: "Inter, Avenir Next, Helvetica Neue, Arial, Noto Sans TC, Noto Sans CJK TC, sans-serif",
               textShadow:
                 "0 4px 0 rgba(0,0,0,0.96), 0 -4px 0 rgba(0,0,0,0.96), 4px 0 0 rgba(0,0,0,0.96), -4px 0 0 rgba(0,0,0,0.96), 3px 3px 0 rgba(0,0,0,0.96), -3px 3px 0 rgba(0,0,0,0.96), 0 8px 18px rgba(0,0,0,0.7)",
             }}
@@ -363,7 +363,7 @@ export function FishLipSync({
                 fontWeight: 600,
                 lineHeight: 1.2,
                 letterSpacing: "0.02em",
-                fontFamily: "Inter, Avenir Next, Helvetica Neue, Arial, sans-serif",
+                fontFamily: "Inter, Avenir Next, Helvetica Neue, Arial, Noto Sans TC, Noto Sans CJK TC, sans-serif",
                 textShadow:
                   "0 2px 0 rgba(0,0,0,0.92), 0 -2px 0 rgba(0,0,0,0.92), 2px 0 0 rgba(0,0,0,0.92), -2px 0 0 rgba(0,0,0,0.92), 0 4px 12px rgba(0,0,0,0.6)",
               }}

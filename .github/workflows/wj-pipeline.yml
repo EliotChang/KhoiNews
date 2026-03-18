@@ -85,7 +85,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
           which ffprobe && ffprobe -version | head -1
 
       - name: Install Chrome
@@ -167,12 +167,12 @@ jobs:
           VIDEO_INTRO_DURATION_SECONDS: ${{ secrets.VIDEO_INTRO_DURATION_SECONDS || '2.0' }}
           VIDEO_INTRO_MUSIC_PATH: ""
           VIDEO_OUTRO_AUDIO_PATH: "pipeline/video_templates/fish_lipsync/public/audio/breaking_news_outro.wav"
-          VIDEO_CAPTION_Y: ${{ secrets.VIDEO_CAPTION_Y || '-5' }}
+          VIDEO_CAPTION_Y: ${{ secrets.VIDEO_CAPTION_Y || '-15' }}
           VIDEO_CAPTIONS_ENABLED: "true"
           VIDEO_CAPTION_WORDS_PER_LINE: "4"
           VIDEO_CAPTION_ALIGNMENT_ENABLED: "true"
           VIDEO_CAPTION_ALIGNMENT_PROVIDER: "elevenlabs"
-          VIDEO_CAPTION_MAX_WORDS_PER_CUE: "4"
+          VIDEO_CAPTION_MAX_WORDS_PER_CUE: "6"
           VIDEO_CAPTION_MIN_ALIGNMENT_COVERAGE: "0.5"
           VIDEO_MEDIA_MAX_IMAGES: "3"
           VIDEO_MEDIA_DISPLAY_SECONDS: ${{ secrets.VIDEO_MEDIA_DISPLAY_SECONDS || '2.5' }}
