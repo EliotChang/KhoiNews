@@ -1,0 +1,181 @@
+name: World Journal Pipeline
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      top_headlines_per_run:
+        description: "Manual override for TOP_HEADLINES_PER_RUN"
+        required: false
+        default: "3"
+        type: string
+      max_posts_per_run:
+        description: "Manual override for MAX_POSTS_PER_RUN"
+        required: false
+        default: "5"
+        type: string
+      publish_max_jobs_per_run:
+        description: "Manual override for PUBLISH_MAX_JOBS_PER_RUN"
+        required: false
+        default: "3"
+        type: string
+      publish_enforce_compliance:
+        description: "Manual override for PUBLISH_ENFORCE_COMPLIANCE"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      content_script_min_words:
+        description: "Manual override for CONTENT_SCRIPT_MIN_WORDS"
+        required: false
+        default: "100"
+        type: string
+      content_script_min_facts:
+        description: "Manual override for CONTENT_SCRIPT_MIN_FACTS"
+        required: false
+        default: "3"
+        type: string
+      media_quality_gate_enabled:
+        description: "Manual override for MEDIA_QUALITY_GATE_ENABLED"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      metricool_review_required:
+        description: "Manual override for METRICOOL_REVIEW_REQUIRED"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      publish_schedule_at:
+        description: "Override schedule anchor (ISO 8601, e.g. 2026-03-12T05:00:00Z)"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: wj-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          which ffprobe && ffprobe -version | head -1
+
+      - name: Install Chrome
+        id: setup-chrome
+        run: |
+          if ! command -v google-chrome-stable &>/dev/null; then
+            sudo apt-get install -y -qq google-chrome-stable || true
+          fi
+          CHROME_PATH="$(command -v google-chrome-stable || command -v google-chrome || echo '/usr/bin/google-chrome-stable')"
+          echo "chrome-path=${CHROME_PATH}" >> "$GITHUB_OUTPUT"
+          "${CHROME_PATH}" --version
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Remotion dependencies
+        run: npm ci
+        working-directory: pipeline/video_templates/fish_lipsync
+
+      - name: Run World Journal pipeline
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_VOICE_BUCKET: ${{ secrets.SUPABASE_VOICE_BUCKET }}
+          SUPABASE_VIDEO_BUCKET: ${{ secrets.SUPABASE_VIDEO_BUCKET }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID || 'WuLq5z7nEcrhppO0ZQJw' }}
+          ELEVENLABS_TTS_MODEL_ID: "eleven_multilingual_v2"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514' }}
+          CONTENT_LANGUAGE: "zh-TW"
+          WJ_BASE_URL: ${{ secrets.WJ_BASE_URL || 'https://www.worldjournal.com' }}
+          WJ_CATEGORY_PATHS: ${{ secrets.WJ_CATEGORY_PATHS || '/wj/cate/breaking,/wj/cate/breaking/121006,/wj/cate/breaking/121103,/wj/cate/breaking/121099,/wj/cate/breaking/121102' }}
+          FALLBACK_FEEDS_ENABLED: "false"
+          MAX_POSTS_PER_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.max_posts_per_run) || secrets.MAX_POSTS_PER_RUN || '25' }}
+          TOP_HEADLINES_PER_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.top_headlines_per_run) || secrets.TOP_HEADLINES_PER_RUN || '3' }}
+          ENGAGEMENT_SCORING_ENABLED: ${{ secrets.ENGAGEMENT_SCORING_ENABLED || 'true' }}
+          ENGAGEMENT_MIN_SCORE: ${{ secrets.ENGAGEMENT_MIN_SCORE || '0.55' }}
+          ENGAGEMENT_FLOOR_SCORE: ${{ secrets.ENGAGEMENT_FLOOR_SCORE || '0.50' }}
+          CADENCE_MIN_POSTS_PER_RUN: ${{ secrets.CADENCE_MIN_POSTS_PER_RUN || '2' }}
+          CONTENT_MIX_PROFILE: ${{ secrets.CONTENT_MIX_PROFILE || 'hard_news_culture' }}
+          REQUEST_TIMEOUT_SECONDS: ${{ secrets.REQUEST_TIMEOUT_SECONDS || '20' }}
+          CONTENT_SCRIPT_TARGET_SECONDS: ${{ secrets.CONTENT_SCRIPT_TARGET_SECONDS || '35' }}
+          CONTENT_SCRIPT_TARGET_WORDS: ${{ secrets.CONTENT_SCRIPT_TARGET_WORDS || '130' }}
+          CONTENT_SCRIPT_MAX_WORDS_BUFFER: ${{ secrets.CONTENT_SCRIPT_MAX_WORDS_BUFFER || '15' }}
+          CONTENT_SCRIPT_MIN_WORDS: ${{ (github.event_name == 'workflow_dispatch' && inputs.content_script_min_words) || secrets.CONTENT_SCRIPT_MIN_WORDS || '100' }}
+          CONTENT_SCRIPT_MIN_FACTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.content_script_min_facts) || secrets.CONTENT_SCRIPT_MIN_FACTS || '3' }}
+          CONTENT_SCRIPT_MIN_SENTENCES: ${{ secrets.CONTENT_SCRIPT_MIN_SENTENCES || '4' }}
+          CONTENT_SCRIPT_MAX_SENTENCES: ${{ secrets.CONTENT_SCRIPT_MAX_SENTENCES || '7' }}
+          PERSONA_KEY: ${{ secrets.PERSONA_KEY || 'default' }}
+          TOPIC_BLOCKLIST_ENABLED: "true"
+          PUBLISH_ENABLED: ${{ secrets.PUBLISH_ENABLED || 'true' }}
+          PUBLISH_SCHEDULE_SPACING_HOURS: ${{ secrets.PUBLISH_SCHEDULE_SPACING_HOURS || '4' }}
+          PUBLISH_SCHEDULE_AT: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_schedule_at) || '' }}
+          PUBLISH_MAX_RETRIES: ${{ secrets.PUBLISH_MAX_RETRIES || '3' }}
+          PUBLISH_MAX_JOBS_PER_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_max_jobs_per_run) || secrets.PUBLISH_MAX_JOBS_PER_RUN || '3' }}
+          PUBLISH_CLAIM_STALE_IN_PROGRESS_MINUTES: ${{ secrets.PUBLISH_CLAIM_STALE_IN_PROGRESS_MINUTES || '45' }}
+          ALLOW_DUPLICATE_LINK_REPOST: ${{ secrets.ALLOW_DUPLICATE_LINK_REPOST || 'false' }}
+          PUBLISH_ENFORCE_COMPLIANCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_enforce_compliance) || secrets.PUBLISH_ENFORCE_COMPLIANCE || 'true' }}
+          METRICOOL_PUBLISH_ENABLED: ${{ secrets.METRICOOL_PUBLISH_ENABLED || 'false' }}
+          METRICOOL_USER_TOKEN: ${{ secrets.METRICOOL_USER_TOKEN }}
+          METRICOOL_API_URL: ${{ secrets.METRICOOL_API_URL }}
+          METRICOOL_USER_ID: ${{ secrets.METRICOOL_USER_ID }}
+          METRICOOL_BLOG_ID: ${{ secrets.METRICOOL_BLOG_ID }}
+          METRICOOL_TARGET_PLATFORMS: ${{ secrets.METRICOOL_TARGET_PLATFORMS || 'tiktok,instagram,youtube' }}
+          METRICOOL_REVIEW_REQUIRED: ${{ (github.event_name == 'workflow_dispatch' && inputs.metricool_review_required) || secrets.METRICOOL_REVIEW_REQUIRED || 'false' }}
+          METRICOOL_LINK_IN_BIO_ENABLED: ${{ secrets.METRICOOL_LINK_IN_BIO_ENABLED || 'true' }}
+          THUMBNAIL_GENERATION_ENABLED: ${{ secrets.THUMBNAIL_GENERATION_ENABLED || 'true' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
+          GOOGLE_CUSTOM_SEARCH_CX: ${{ secrets.GOOGLE_CUSTOM_SEARCH_CX }}
+          ENABLE_VIDEO_RENDER: "true"
+          REMOTION_PROJECT_DIR: "pipeline/video_templates/fish_lipsync"
+          VIDEO_BROWSER_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+          FISH_MOUTH_FRAMES_DIR: "pipeline/video_templates/fish_lipsync/public/mouth"
+          FISH_BACKGROUND_IMAGE_PATH: "pipeline/video_templates/fish_lipsync/public/background.png"
+          VIDEO_SENSITIVITY: ${{ secrets.VIDEO_SENSITIVITY }}
+          VIDEO_INTRO_DURATION_SECONDS: ${{ secrets.VIDEO_INTRO_DURATION_SECONDS || '2.0' }}
+          VIDEO_INTRO_MUSIC_PATH: ""
+          VIDEO_OUTRO_AUDIO_PATH: "pipeline/video_templates/fish_lipsync/public/audio/breaking_news_outro.wav"
+          VIDEO_CAPTION_Y: ${{ secrets.VIDEO_CAPTION_Y || '-5' }}
+          VIDEO_CAPTIONS_ENABLED: "true"
+          VIDEO_CAPTION_WORDS_PER_LINE: "4"
+          VIDEO_CAPTION_ALIGNMENT_ENABLED: "true"
+          VIDEO_CAPTION_ALIGNMENT_PROVIDER: "elevenlabs"
+          VIDEO_CAPTION_MAX_WORDS_PER_CUE: "4"
+          VIDEO_CAPTION_MIN_ALIGNMENT_COVERAGE: "0.5"
+          VIDEO_MEDIA_MAX_IMAGES: "3"
+          VIDEO_MEDIA_DISPLAY_SECONDS: ${{ secrets.VIDEO_MEDIA_DISPLAY_SECONDS || '2.5' }}
+          VIDEO_REQUIRE_IMAGE_MEDIA: ${{ secrets.VIDEO_REQUIRE_IMAGE_MEDIA || 'true' }}
+          MEDIA_QUALITY_GATE_ENABLED: ${{ (github.event_name == 'workflow_dispatch' && inputs.media_quality_gate_enabled) || secrets.MEDIA_QUALITY_GATE_ENABLED || 'true' }}
+        run: python -m pipeline.main
