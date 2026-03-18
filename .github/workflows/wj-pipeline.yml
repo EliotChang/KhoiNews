@@ -146,7 +146,7 @@ jobs:
           PUBLISH_CLAIM_STALE_IN_PROGRESS_MINUTES: ${{ secrets.PUBLISH_CLAIM_STALE_IN_PROGRESS_MINUTES || '45' }}
           ALLOW_DUPLICATE_LINK_REPOST: ${{ secrets.ALLOW_DUPLICATE_LINK_REPOST || 'false' }}
           PUBLISH_ENFORCE_COMPLIANCE: ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_enforce_compliance) || secrets.PUBLISH_ENFORCE_COMPLIANCE || 'true' }}
-          METRICOOL_PUBLISH_ENABLED: ${{ secrets.METRICOOL_PUBLISH_ENABLED || 'false' }}
+          METRICOOL_PUBLISH_ENABLED: ${{ secrets.METRICOOL_PUBLISH_ENABLED || 'true' }}
           METRICOOL_USER_TOKEN: ${{ secrets.METRICOOL_USER_TOKEN }}
           METRICOOL_API_URL: ${{ secrets.METRICOOL_API_URL }}
           METRICOOL_USER_ID: ${{ secrets.METRICOOL_USER_ID }}
@@ -167,7 +167,7 @@ jobs:
           VIDEO_INTRO_DURATION_SECONDS: ${{ secrets.VIDEO_INTRO_DURATION_SECONDS || '2.0' }}
           VIDEO_INTRO_MUSIC_PATH: ""
           VIDEO_OUTRO_AUDIO_PATH: "pipeline/video_templates/fish_lipsync/public/audio/breaking_news_outro.wav"
-          VIDEO_CAPTION_Y: ${{ secrets.VIDEO_CAPTION_Y || '-15' }}
+          VIDEO_CAPTION_Y: ${{ secrets.VIDEO_CAPTION_Y || '8' }}
           VIDEO_CAPTIONS_ENABLED: "true"
           VIDEO_CAPTION_WORDS_PER_LINE: "4"
           VIDEO_CAPTION_ALIGNMENT_ENABLED: "true"

@@ -56,7 +56,7 @@ export function RemotionRoot(): React.ReactElement {
         deskX: 0,
         deskY: 1,
         deskScale: 110,
-        captionY: -5,
+        captionY: 8,
         postImageY: -24,
         postImageScale: 62,
         showDebug: false,

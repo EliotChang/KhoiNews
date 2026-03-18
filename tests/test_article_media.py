@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import requests
 
-from pipeline.article_media import _infer_media_type, extract_article_context, extract_best_media_from_article
+from pipeline.article_media import _infer_media_type, extract_article_context, extract_best_media_from_article, is_low_value_image_url
 
 
 class _FakeResponse:
@@ -156,6 +156,32 @@ class ArticleMediaTests(unittest.TestCase):
 
         context = extract_article_context(page_url="https://example.com/story", timeout_seconds=5)
         self.assertEqual(context, "")
+
+
+class LowValueImageUrlTests(unittest.TestCase):
+    def test_detects_logo_in_url(self) -> None:
+        self.assertTrue(is_low_value_image_url("https://example.com/assets/logo.png"))
+
+    def test_detects_favicon_in_url(self) -> None:
+        self.assertTrue(is_low_value_image_url("https://example.com/favicon.ico"))
+
+    def test_accepts_normal_image_url(self) -> None:
+        self.assertFalse(is_low_value_image_url("https://cdn.example.com/photo-12345.jpg"))
+
+    def test_rejects_worldjournal_default_og_image(self) -> None:
+        self.assertTrue(is_low_value_image_url("https://www.worldjournal.com/static/img/og_image.png"))
+
+    def test_rejects_generic_static_og_image_variants(self) -> None:
+        self.assertTrue(is_low_value_image_url("https://example.com/static/img/og-image.jpg"))
+        self.assertTrue(is_low_value_image_url("https://example.com/static/images/ogimage.png"))
+        self.assertTrue(is_low_value_image_url("https://example.com/static/img/default-share.jpg"))
+        self.assertTrue(is_low_value_image_url("https://example.com/static/img/default_social.png"))
+        self.assertTrue(is_low_value_image_url("https://example.com/static/img/default_thumb.webp"))
+
+    def test_accepts_article_specific_image_from_worldjournal(self) -> None:
+        self.assertFalse(is_low_value_image_url(
+            "https://pgw.worldjournal.com/gw/photo.php?u=https://uc.udn.com.tw/photo/t3/2026/03/19/34776217.jpg"
+        ))
 
 
 if __name__ == "__main__":

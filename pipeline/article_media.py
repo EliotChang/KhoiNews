@@ -21,9 +21,18 @@ _LOW_VALUE_URL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_DEFAULT_SHARE_IMAGE_PATTERN = re.compile(
+    r"/static/(?:img|images?)/(?:og[_-]?image|default[_-]?(?:share|social|thumb))\.",
+    re.IGNORECASE,
+)
+
 
 def is_low_value_image_url(url: str) -> bool:
-    return bool(_LOW_VALUE_URL_PATTERN.search(url))
+    if _LOW_VALUE_URL_PATTERN.search(url):
+        return True
+    if _DEFAULT_SHARE_IMAGE_PATTERN.search(url):
+        return True
+    return False
 
 _DEFAULT_HEADERS = {
     "User-Agent": (

@@ -6,10 +6,13 @@ import unittest
 from unittest.mock import Mock, patch
 
 from pipeline.video_gen import (
+    FALLBACK_MIN_IMAGE_HEIGHT,
+    FALLBACK_MIN_IMAGE_WIDTH,
     MAX_RENDER_TITLE_CHARS,
     MIN_IMAGE_PAYLOAD_BYTES,
     _compute_render_timeline,
     _enforce_render_stream_compliance,
+    _fallback_image_meets_min_dimensions,
     _is_likely_supported_image_bytes,
     _is_likely_supported_video_bytes,
     _is_render_stream_compliant,
@@ -76,6 +79,50 @@ class ImageUsabilityTests(unittest.TestCase):
 
     def test_image_bytes_validator_accepts_gif(self) -> None:
         self.assertTrue(_is_likely_supported_image_bytes(b"GIF89a" + b"\x00" * 100))
+
+
+class FallbackImageDimensionTests(unittest.TestCase):
+    @staticmethod
+    def _make_png_bytes(width: int, height: int) -> bytes:
+        from io import BytesIO
+        from PIL import Image
+        buf = BytesIO()
+        Image.new("RGB", (width, height), color=(128, 128, 128)).save(buf, format="PNG")
+        return buf.getvalue()
+
+    def test_fallback_min_dimensions_constants(self) -> None:
+        self.assertEqual(FALLBACK_MIN_IMAGE_WIDTH, 640)
+        self.assertEqual(FALLBACK_MIN_IMAGE_HEIGHT, 640)
+
+    def test_rejects_wj_default_image_dimensions(self) -> None:
+        small_image = self._make_png_bytes(640, 400)
+        self.assertFalse(_fallback_image_meets_min_dimensions(small_image))
+
+    def test_accepts_large_article_image(self) -> None:
+        large_image = self._make_png_bytes(1280, 720)
+        self.assertTrue(_fallback_image_meets_min_dimensions(large_image))
+
+    def test_rejects_narrow_image(self) -> None:
+        narrow = self._make_png_bytes(200, 800)
+        self.assertFalse(_fallback_image_meets_min_dimensions(narrow))
+
+    def test_rejects_short_image(self) -> None:
+        short = self._make_png_bytes(800, 200)
+        self.assertFalse(_fallback_image_meets_min_dimensions(short))
+
+    def test_accepts_exact_minimum(self) -> None:
+        exact = self._make_png_bytes(640, 640)
+        self.assertTrue(_fallback_image_meets_min_dimensions(exact))
+
+    def test_rejects_corrupt_bytes(self) -> None:
+        self.assertFalse(_fallback_image_meets_min_dimensions(b"\x00\x01\x02\x03" * 1000))
+
+    def test_rejects_wj_default_og_image_url(self) -> None:
+        large_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * MIN_IMAGE_PAYLOAD_BYTES
+        self.assertFalse(_is_usable_image_candidate(
+            media_url="https://www.worldjournal.com/static/img/og_image.png",
+            payload_bytes=large_png,
+        ))
 
 
 class RenderStreamComplianceTests(unittest.TestCase):

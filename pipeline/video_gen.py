@@ -261,6 +261,21 @@ def _is_usable_image_candidate(*, media_url: str, payload_bytes: bytes) -> bool:
     return _is_likely_supported_image_bytes(payload_bytes)
 
 
+FALLBACK_MIN_IMAGE_WIDTH = 640
+FALLBACK_MIN_IMAGE_HEIGHT = 640
+
+
+def _fallback_image_meets_min_dimensions(image_bytes: bytes) -> bool:
+    from io import BytesIO
+    try:
+        from PIL import Image
+        with Image.open(BytesIO(image_bytes)) as img:
+            width, height = img.size
+            return width >= FALLBACK_MIN_IMAGE_WIDTH and height >= FALLBACK_MIN_IMAGE_HEIGHT
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _build_public_video_url(*, supabase_url: str, bucket_name: str, object_path: str) -> str:
     encoded_object_path = quote(object_path, safe="/")
     return f"{supabase_url.rstrip('/')}/storage/v1/object/public/{bucket_name}/{encoded_object_path}"
@@ -829,10 +844,21 @@ def _prepare_runtime_media(
     if not image_relative_paths and post_image_url:
         try:
             fallback_image_bytes = _download_bytes(url=post_image_url, timeout_seconds=timeout_seconds)
-            if not _is_likely_supported_image_bytes(fallback_image_bytes):
-                reject_reasons.append(f"fallback_unsupported_format({len(fallback_image_bytes)})")
+            if not _is_usable_image_candidate(media_url=post_image_url, payload_bytes=fallback_image_bytes):
+                reject_detail = (
+                    "low_value_url" if is_low_value_image_url(post_image_url)
+                    else f"too_small({len(fallback_image_bytes)})" if len(fallback_image_bytes) < MIN_IMAGE_PAYLOAD_BYTES
+                    else "unsupported_format"
+                )
+                reject_reasons.append(f"fallback_{reject_detail}")
                 LOGGER.warning(
-                    "Runtime post-image fallback unsupported format token=%s url=%s bytes=%d",
+                    "Runtime post-image fallback rejected by usability check token=%s url=%s reason=%s bytes=%d",
+                    runtime_token, post_image_url, reject_detail, len(fallback_image_bytes),
+                )
+            elif not _fallback_image_meets_min_dimensions(fallback_image_bytes):
+                reject_reasons.append("fallback_too_small_dimensions")
+                LOGGER.warning(
+                    "Runtime post-image fallback rejected for insufficient dimensions token=%s url=%s bytes=%d",
                     runtime_token, post_image_url, len(fallback_image_bytes),
                 )
             else:
