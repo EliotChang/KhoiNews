@@ -214,7 +214,7 @@ def generate_elevenlabs_voice(
         stability,
         similarity_boost,
         apply_text_normalization_value,
-        len(prepared_text.split()),
+        len(_CJK_CHAR_RE.findall(prepared_text)) + len(_CJK_CHAR_RE.sub("", prepared_text).split()),
         len(prepared_text),
     )
     endpoint_with_timestamps = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps"

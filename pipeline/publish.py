@@ -29,6 +29,15 @@ from pipeline.wj_ingest import SourcePostInput
 from pipeline.text_sanitize import contains_url_text
 from pipeline.voice_gen import VoiceAssetResult
 
+_CJK_CHAR_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]")
+
+
+def _cjk_word_count(text: str) -> int:
+    cjk_chars = len(_CJK_CHAR_RE.findall(text))
+    non_cjk = _CJK_CHAR_RE.sub("", text).strip()
+    latin_words = len(non_cjk.split()) if non_cjk else 0
+    return cjk_chars + latin_words
+
 
 LOGGER = logging.getLogger("wj_publish")
 SUPPORTED_PLATFORMS = {"metricool"}
@@ -432,7 +441,7 @@ def _compliance_checks(*, platform: str, payload: dict[str, Any], enforce_compli
     if script_contains_url:
         blockers.append("script contains URL-like text")
 
-    script_words = len(script_text.split())
+    script_words = _cjk_word_count(script_text)
     checks.append({"name": "script_words_min", "passed": script_words >= MIN_SCRIPT_WORDS, "words": script_words})
     if script_words < MIN_SCRIPT_WORDS:
         blockers.append(f"script must contain at least {MIN_SCRIPT_WORDS} words")
