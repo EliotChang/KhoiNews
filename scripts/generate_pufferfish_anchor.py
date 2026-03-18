@@ -26,41 +26,50 @@ MODEL = "gemini-3-pro-image-preview"
 NUM_MOUTH_STATES = 2
 
 MOUTH_STATES = {
-    0: "completely closed, lips pressed tightly together",
-    1: "barely open, a thin slit visible between the upper and lower lip",
-    2: "slightly open, a small gap showing between upper and lower lip",
-    3: "moderately open, mouth clearly open with a visible gap",
-    4: "wide open, mouth opened wide",
-    5: "fully open, mouth gaping as wide as possible",
+    0: "completely closed, jaw shut tight in profile view",
+    1: "slightly open, jaw dropped slightly showing a small gap on the side",
+    2: "moderately open, jaw clearly dropped with a visible opening on the side",
+    3: "wide open, jaw dropped wide showing the interior of the mouth from the side",
+    4: "very wide open, jaw gaping from the side",
+    5: "fully open, jaw dropped as far as possible in profile",
 }
 
 BASE_PROMPT = (
-    "A SINGLE koi fish (錦鯉) news anchor character, WIDE and ROUND body "
-    "proportions — NOT tall and narrow. The character should be WIDER than it "
-    "is tall, similar to how the realistic fish head news anchor in SpongeBob "
-    "SquarePants looks — a big wide rounded fish head facing the camera with "
-    "a short stout body. "
-    "The fish faces the camera HEAD-ON. The mouth is at the TOP of the head "
-    "and opens UPWARD (upper jaw hinges up, like a fish gulping at the "
-    "surface). This is key — the mouth opens vertically at the top, NOT at "
-    "the front. "
-    "The koi HEAD and BODY are hyper-realistic and detailed — beautiful "
-    "red-orange and white coloring, shimmering scales, large expressive eyes "
-    "looking directly at the viewer. The body is WIDE and ROUND, taking up "
-    "most of the frame width. "
-    "NO makeup, NO blush, NO eyelashes, NO feminine accessories — just a "
-    "natural, beautiful koi fish rendered photo-realistically. "
-    "The SUIT is 2D flat cartoon style — a brown suit jacket with a white "
-    "dress shirt collar and a red necktie, drawn with solid flat colors, clean "
-    "outlines, and minimal shading. The suit is at the bottom, like a simple "
-    "2D cartoon drawing pasted onto the character. "
+    "A SINGLE koi fish (錦鯉) news anchor character shown from a 3/4 SIDE "
+    "PROFILE VIEW — facing LEFT, head angled slightly UPWARD with confident "
+    "poise, like a classic TV news anchor. NOT front-facing, NOT head-on. "
+    "The composition matches the SpongeBob 'Realistic Fish Head' news anchor "
+    "framing: 3/4 profile, one eye visible, head tilted up with authority. "
+    "The mouth is on the SIDE of the face and opens outward to the LEFT — "
+    "the jaw drops DOWN and OUT in profile, like a fish opening its mouth "
+    "naturally when seen from the side. "
+    "CRITICAL — the koi fish HEAD must look like a REAL PHOTOGRAPH of a "
+    "living koi fish. PHOTOREALISTIC, not illustrated, not painterly, not "
+    "digital art. Render the head as if shot with a macro lens: real wet "
+    "skin texture, real iridescent scales with light reflections, a real "
+    "glossy fish eye with depth and specular highlight, visible pores and "
+    "fine detail on the skin. The coloring is vivid red-orange and white "
+    "with natural gradients between the patches. Think National Geographic "
+    "close-up photo of a koi fish, not a painting or illustration of one. "
+    "NO makeup, NO blush, NO eyelashes, NO jewelry — the femininity comes "
+    "entirely from the SUIT silhouette and the confident upward pose. "
+    "The SUIT is 2D flat cartoon style — a sharp, structured POWER BLAZER "
+    "in deep charcoal or dark navy. The blazer has STRONG PADDED SHOULDERS, "
+    "a nipped waist, and sharp peaked lapels — a commanding boardroom / CNN "
+    "anchor silhouette. Underneath is a crisp white silk blouse with an "
+    "open neckline — NO necktie, NO bowtie. The open collar conveys "
+    "confident authority. This is a female power-boss look. "
+    "Drawn with solid flat colors, clean outlines, and minimal shading. "
     "NO fabric texture, NO realistic folds, NO painterly brushwork on the suit "
     "— just clean, simple, flat 2D shapes with solid colors. "
+    "The CONTRAST between the photorealistic fish head and the flat 2D "
+    "cartoon suit is INTENTIONAL and must be preserved — do NOT blend the "
+    "styles together. "
     "The background MUST be a single solid bright green (#00FF00) color — "
     "NO checkerboard, NO gradient, NO pattern, just pure flat green. "
-    "IMPORTANT: ONE character only, centered, WIDE proportions. Keep the body, "
-    "suit, tie, eyes, and overall composition IDENTICAL across all frames — "
-    "only the mouth opening at the TOP changes."
+    "IMPORTANT: ONE character only, 3/4 SIDE PROFILE facing LEFT. Keep the "
+    "body, suit, eyes, and overall composition IDENTICAL across all frames — "
+    "only the mouth opening on the SIDE changes."
 )
 
 
@@ -152,7 +161,7 @@ def generate_mouth_frames():
 
         content_parts.append(
             types.Part.from_text(
-                text="Reference image (original fish anchor — match this pose, framing, and suit style but use a KOI FISH instead of a pufferfish):"
+                text="Reference image (original fish anchor — match this 3/4 SIDE PROFILE pose and news-anchor framing but use a KOI FISH with a female power-boss suit):"
             )
         )
         content_parts.append(ref_fish_part)
@@ -163,7 +172,7 @@ def generate_mouth_frames():
             mouth0_bytes = mouth0_buf.getvalue()
             content_parts.append(
                 types.Part.from_text(
-                    text="Generated koi fish mouth_0 (closed) — keep the character IDENTICAL, only change the mouth opening:"
+                    text="Generated koi fish mouth_0 (closed, side profile) — keep the character IDENTICAL, only change the mouth opening on the side:"
                 )
             )
             content_parts.append(_make_reference_part(mouth0_bytes))

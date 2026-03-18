@@ -904,6 +904,8 @@ _CJK_VOICED_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\w]")
 _CJK_CHAR_RE_VIDEO = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
 _SYLLABLE_OPEN_RATIO = 0.72
 _MIN_SYLLABLE_OPEN_SECONDS = 0.08
+_MIN_CUE_HOLD_SECONDS = 0.10
+_MIN_CLOSED_GAP_SECONDS = 0.07
 
 
 def _build_mouth_cues_from_alignment(
@@ -934,16 +936,28 @@ def _build_mouth_cues_from_alignment(
 
     if is_cjk_dominant:
         offset = voice_start_seconds
-        cues: list[dict[str, float]] = []
+        raw_cues: list[tuple[float, float]] = []
         for start, end in voiced_intervals:
             duration = end - start
             open_duration = max(_MIN_SYLLABLE_OPEN_SECONDS, duration * _SYLLABLE_OPEN_RATIO)
             cue_end = start + min(open_duration, duration)
-            cues.append({
-                "startSec": round(start + offset, 3),
-                "endSec": round(cue_end + offset, 3),
-            })
-        return cues
+            raw_cues.append((round(start + offset, 3), round(cue_end + offset, 3)))
+
+        if not raw_cues:
+            return []
+        merged_cjk: list[tuple[float, float]] = [raw_cues[0]]
+        for cue_start, cue_end in raw_cues[1:]:
+            prev_start, prev_end = merged_cjk[-1]
+            if cue_start - prev_end <= _MIN_CLOSED_GAP_SECONDS:
+                merged_cjk[-1] = (prev_start, max(prev_end, cue_end))
+            else:
+                merged_cjk.append((cue_start, cue_end))
+
+        return [
+            {"startSec": s, "endSec": e}
+            for s, e in merged_cjk
+            if e - s >= _MIN_CUE_HOLD_SECONDS
+        ]
 
     merged: list[tuple[float, float]] = [voiced_intervals[0]]
     for start, end in voiced_intervals[1:]:

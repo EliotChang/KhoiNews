@@ -34,9 +34,9 @@ LOGGER = logging.getLogger("wj_publish")
 SUPPORTED_PLATFORMS = {"metricool"}
 MIN_SCRIPT_WORDS = 40
 MIN_AUDIO_SECONDS = 12.0
-MAX_AUDIO_SECONDS = 38.0
+MAX_AUDIO_SECONDS = 55.0
 MIN_VIDEO_SECONDS = 14.0
-MAX_VIDEO_SECONDS = 42.0
+MAX_VIDEO_SECONDS = 60.0
 MAX_AUDIO_VIDEO_DELTA_SECONDS = 7.0
 SENSITIVE_QUERY_KEYS = {
     "access_token",
@@ -339,7 +339,7 @@ def _publish_metricool(*, settings: Settings, payload: dict[str, Any]) -> Publis
     if "youtube" in provider_names:
         request_payload["youtubeData"] = {
             "title": video_title,
-            "type": "video",
+            "type": "short",
             "privacy": "public",
             "madeForKids": False,
         }

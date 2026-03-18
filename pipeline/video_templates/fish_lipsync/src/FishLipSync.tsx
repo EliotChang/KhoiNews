@@ -254,7 +254,7 @@ export function FishLipSync({
             left: `${50 + fishX}%`,
             bottom: `${5 + fishY}%`,
             transform: `translateX(-50%)${fishFlipped ? " scaleX(-1)" : ""}`,
-            opacity: i === mouthIndex ? 1 : 0,
+            display: i === mouthIndex ? "block" : "none",
           }}
         />
       ))}
