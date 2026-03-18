@@ -875,12 +875,21 @@ def _build_caption_cues(
     intro_duration_seconds: float,
     words_per_line: int,
 ) -> list[dict[str, float | str]]:
-    words = [word for word in script_text.strip().split() if word]
+    raw_text = script_text.strip()
+    is_cjk = sum(1 for c in raw_text if _CJK_CHAR_RE_VIDEO.match(c)) > len(raw_text) * 0.3
+    if is_cjk:
+        import jieba
+        words = [w for w in jieba.cut(raw_text) if w.strip()]
+    else:
+        words = [word for word in raw_text.split() if word]
     safe_words_per_line = max(1, words_per_line)
+    if is_cjk:
+        safe_words_per_line = min(safe_words_per_line, 4)
     if not words:
         return []
+    joiner = "" if is_cjk else " "
     lines = [
-        " ".join(words[start_idx : start_idx + safe_words_per_line])
+        joiner.join(words[start_idx : start_idx + safe_words_per_line])
         for start_idx in range(0, len(words), safe_words_per_line)
     ]
     spoken_window_seconds = max(0.6, duration_seconds - max(0.0, intro_duration_seconds))
@@ -1228,7 +1237,7 @@ def generate_fish_lipsync_video(
                 if caption_cues and script_word_count > 0:
                     caption_word_count = sum(len(str(cue["text"]).split()) for cue in caption_cues)
                     coverage_ratio = caption_word_count / script_word_count
-                    if coverage_ratio < 0.9:
+                    if coverage_ratio < 0.7:
                         LOGGER.warning(
                             "Aligned captions cover only %d/%d words (%.0f%%) for post_id=%s; "
                             "falling back to heuristic timing to ensure full script is shown",
