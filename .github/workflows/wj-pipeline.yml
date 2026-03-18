@@ -124,8 +124,8 @@ jobs:
           MAX_POSTS_PER_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.max_posts_per_run) || secrets.MAX_POSTS_PER_RUN || '25' }}
           TOP_HEADLINES_PER_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.top_headlines_per_run) || secrets.TOP_HEADLINES_PER_RUN || '3' }}
           ENGAGEMENT_SCORING_ENABLED: ${{ secrets.ENGAGEMENT_SCORING_ENABLED || 'true' }}
-          ENGAGEMENT_MIN_SCORE: ${{ secrets.ENGAGEMENT_MIN_SCORE || '0.55' }}
-          ENGAGEMENT_FLOOR_SCORE: ${{ secrets.ENGAGEMENT_FLOOR_SCORE || '0.50' }}
+          ENGAGEMENT_MIN_SCORE: ${{ secrets.ENGAGEMENT_MIN_SCORE || '0.45' }}
+          ENGAGEMENT_FLOOR_SCORE: ${{ secrets.ENGAGEMENT_FLOOR_SCORE || '0.40' }}
           CADENCE_MIN_POSTS_PER_RUN: ${{ secrets.CADENCE_MIN_POSTS_PER_RUN || '2' }}
           CONTENT_MIX_PROFILE: ${{ secrets.CONTENT_MIX_PROFILE || 'hard_news_culture' }}
           REQUEST_TIMEOUT_SECONDS: ${{ secrets.REQUEST_TIMEOUT_SECONDS || '20' }}
