@@ -476,7 +476,7 @@ def load_settings() -> Settings:
         video_pixel_format=_optional_str_env("VIDEO_PIXEL_FORMAT", "yuv420p"),
         video_bitrate=_optional_str_env("VIDEO_BITRATE", "8M"),
         video_audio_bitrate=_optional_str_env("VIDEO_AUDIO_BITRATE", "192k"),
-        video_caption_y=_optional_float_env("VIDEO_CAPTION_Y", 8.0),
+        video_caption_y=_optional_float_env("VIDEO_CAPTION_Y", -4.0),
         video_captions_enabled=_optional_bool_env("VIDEO_CAPTIONS_ENABLED", True),
         video_caption_words_per_line=_optional_int_env("VIDEO_CAPTION_WORDS_PER_LINE", 4),
         video_caption_offset_seconds=_optional_float_env("VIDEO_CAPTION_OFFSET_SECONDS", 0.0),

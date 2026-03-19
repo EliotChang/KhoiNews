@@ -243,6 +243,23 @@ def generate_elevenlabs_voice(
         raw_alignment_payload = response_payload.get("normalized_alignment") or response_payload.get("alignment")
         if isinstance(raw_alignment_payload, dict):
             alignment_payload = raw_alignment_payload
+            chars = raw_alignment_payload.get("characters", [])
+            LOGGER.info(
+                "ElevenLabs alignment received post_id=%s characters=%d "
+                "has_starts=%s has_ends=%s",
+                post_id,
+                len(chars) if isinstance(chars, list) else 0,
+                isinstance(raw_alignment_payload.get("character_start_times_seconds"), list),
+                isinstance(raw_alignment_payload.get("character_end_times_seconds"), list),
+            )
+        else:
+            LOGGER.warning(
+                "ElevenLabs timestamps response missing alignment dict for post_id=%s "
+                "normalized_alignment_type=%s alignment_type=%s",
+                post_id,
+                type(response_payload.get("normalized_alignment")).__name__,
+                type(response_payload.get("alignment")).__name__,
+            )
     except (requests.RequestException, ValueError, base64.binascii.Error) as ts_err:
         LOGGER.warning(
             "ElevenLabs timestamps endpoint failed for post_id=%s: %s; falling back to standard endpoint",

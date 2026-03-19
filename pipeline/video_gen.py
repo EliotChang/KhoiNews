@@ -950,6 +950,11 @@ def _build_mouth_cues_from_alignment(
 ) -> list[dict[str, float]]:
     characters, starts, ends = _extract_character_timing(alignment_payload)
     if not characters:
+        LOGGER.warning(
+            "Mouth cue build: _extract_character_timing returned empty "
+            "(alignment keys=%s)",
+            list(alignment_payload.keys()) if isinstance(alignment_payload, dict) else type(alignment_payload).__name__,
+        )
         return []
 
     voiced_intervals: list[tuple[float, float]] = []
@@ -965,6 +970,12 @@ def _build_mouth_cues_from_alignment(
         voiced_intervals.append((start, end))
 
     if not voiced_intervals:
+        LOGGER.warning(
+            "Mouth cue build: 0 voiced intervals from %d characters "
+            "(is_cjk_dominant=%s)",
+            len(characters),
+            is_cjk_dominant,
+        )
         return []
 
     voiced_intervals.sort(key=lambda interval: interval[0])
@@ -1307,9 +1318,22 @@ def generate_fish_lipsync_video(
                 alignment_payload=voice_alignment,
                 voice_start_seconds=voice_start_seconds,
             )
-            LOGGER.info(
-                "Built %d mouth cues from alignment for post_id=%s",
-                len(mouth_cues),
+            if mouth_cues:
+                LOGGER.info(
+                    "Built %d mouth cues from alignment for post_id=%s",
+                    len(mouth_cues),
+                    post_id,
+                )
+            else:
+                LOGGER.warning(
+                    "Alignment data present but produced 0 mouth cues for post_id=%s "
+                    "alignment_keys=%s",
+                    post_id,
+                    list(voice_alignment.keys()) if isinstance(voice_alignment, dict) else type(voice_alignment).__name__,
+                )
+        else:
+            LOGGER.warning(
+                "No voice alignment data for post_id=%s; mouth will use amplitude fallback",
                 post_id,
             )
 

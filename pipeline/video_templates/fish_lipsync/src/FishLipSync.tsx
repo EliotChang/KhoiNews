@@ -57,7 +57,7 @@ export const fishLipSyncSchema = z.object({
   deskX: z.number().min(-100).max(100).step(1).default(0),
   deskY: z.number().min(-100).max(100).step(1).default(1),
   deskScale: z.number().min(50).max(300).step(1).default(110),
-  captionY: z.number().min(-100).max(100).step(1).default(8),
+  captionY: z.number().min(-100).max(100).step(1).default(-4),
   postImageY: z.number().min(-100).max(100).step(1).default(-24),
   postImageScale: z.number().min(10).max(100).step(1).default(56),
   showDebug: z.boolean().default(false),
