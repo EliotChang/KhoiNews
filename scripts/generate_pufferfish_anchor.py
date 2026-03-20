@@ -35,30 +35,42 @@ MOUTH_STATES = {
 }
 
 BASE_PROMPT = (
-    "A SINGLE koi fish (錦鯉) news anchor character shown from a 3/4 SIDE "
-    "PROFILE VIEW — facing LEFT, head angled slightly UPWARD with confident "
-    "poise, like a classic TV news anchor. NOT front-facing, NOT head-on. "
-    "The composition matches the SpongeBob 'Realistic Fish Head' news anchor "
-    "framing: 3/4 profile, one eye visible, head tilted up with authority. "
-    "The mouth is on the SIDE of the face and opens outward to the LEFT — "
-    "the jaw drops DOWN and OUT in profile, like a fish opening its mouth "
-    "naturally when seen from the side. "
+    "Generate ONLY a SINGLE koi fish (錦鯉) news anchor character — do NOT "
+    "include the reference image in the output, do NOT place two figures "
+    "side by side. Output ONE character CENTERED in the frame. "
+    "The fish head is shown in SIDE PROFILE — only ONE eye visible, facing "
+    "LEFT. The head is tilted FAR BACK so the mouth points STRAIGHT UP "
+    "toward the ceiling / sky — like a fish looking directly upward. The "
+    "mouth is at the VERY TOP of the composition. This exaggerated upward "
+    "tilt gives the character a deadpan serious-but-absurd news anchor vibe. "
+    "PROPORTIONS — THIS IS CRITICAL: The fish HEAD is HUGE — it takes up "
+    "55-60% of the total character height. The body below is VERY SHORT — "
+    "ONLY the shoulders and upper chest are visible, like a bust or a "
+    "news anchor behind a desk. Do NOT draw the waist, hips, or lower "
+    "torso. The body is just a SHORT WIDE STUMP of shoulders + upper chest. "
+    "The shoulders are BROAD, filling about 55-60% of the frame width. The overall "
+    "silhouette is TOP-HEAVY and COMPACT — a big lively fish head sitting "
+    "on a short squat pair of broad shoulders. Think of the SpongeBob "
+    "'Realistic Fish Head' news anchor proportions. "
     "CRITICAL — the koi fish HEAD must look like a REAL PHOTOGRAPH of a "
-    "living koi fish. PHOTOREALISTIC, not illustrated, not painterly, not "
-    "digital art. Render the head as if shot with a macro lens: real wet "
-    "skin texture, real iridescent scales with light reflections, a real "
-    "glossy fish eye with depth and specular highlight, visible pores and "
-    "fine detail on the skin. The coloring is vivid red-orange and white "
-    "with natural gradients between the patches. Think National Geographic "
-    "close-up photo of a koi fish, not a painting or illustration of one. "
-    "NO makeup, NO blush, NO eyelashes, NO jewelry — the femininity comes "
-    "entirely from the SUIT silhouette and the confident upward pose. "
-    "The SUIT is 2D flat cartoon style — a sharp, structured POWER BLAZER "
-    "in deep charcoal or dark navy. The blazer has STRONG PADDED SHOULDERS, "
-    "a nipped waist, and sharp peaked lapels — a commanding boardroom / CNN "
-    "anchor silhouette. Underneath is a crisp white silk blouse with an "
-    "open neckline — NO necktie, NO bowtie. The open collar conveys "
-    "confident authority. This is a female power-boss look. "
+    "GORGEOUS, VIBRANT, SHOW-QUALITY koi fish. PHOTOREALISTIC, not "
+    "illustrated, not painterly, not digital art. The coloring must be "
+    "RICH and SATURATED — deep warm GOLDEN-ORANGE and fiery RED-ORANGE "
+    "patches with clean bright PEARL-WHITE areas. NOT pale, NOT washed "
+    "out, NOT pinkish-grey. The orange should POP — think a prize-winning "
+    "Kohaku koi in crystal-clear water under sunlight. The scales should "
+    "SHIMMER with iridescent light reflections. The eye must look BRIGHT, "
+    "ALERT, and full of LIFE — a glossy jet-black pupil with a sharp "
+    "specular highlight, giving the fish PERSONALITY and charm. The skin "
+    "has a healthy wet SHEEN. Overall the fish should look ALIVE, VIBRANT, "
+    "and BEAUTIFUL — the kind of fish that makes people stop scrolling. "
+    "NO makeup, NO blush, NO eyelashes, NO humanization — just a "
+    "stunningly beautiful living koi. "
+    "The OUTFIT is 2D flat cartoon style — a modern WOMEN'S fitted blazer "
+    "in COBALT BLUE (vivid saturated blue, NOT grey, NOT muted). The blazer "
+    "is sleek and contemporary: clean lines, slim fit, single-button closure, "
+    "structured but NOT boxy. Underneath is a simple black round-neck top. "
+    "A thin delicate gold chain necklace adds a modern feminine accent. "
     "Drawn with solid flat colors, clean outlines, and minimal shading. "
     "NO fabric texture, NO realistic folds, NO painterly brushwork on the suit "
     "— just clean, simple, flat 2D shapes with solid colors. "
@@ -67,15 +79,45 @@ BASE_PROMPT = (
     "styles together. "
     "The background MUST be a single solid bright green (#00FF00) color — "
     "NO checkerboard, NO gradient, NO pattern, just pure flat green. "
-    "IMPORTANT: ONE character only, 3/4 SIDE PROFILE facing LEFT. Keep the "
-    "body, suit, eyes, and overall composition IDENTICAL across all frames — "
-    "only the mouth opening on the SIDE changes."
+    "IMPORTANT: ONE character ONLY, CENTERED, BIG HEAD on SHORT WIDE body, "
+    "side-profile fish head with mouth UP, ALWAYS facing LEFT (eye on the "
+    "RIGHT side of the image). The fish must face the SAME direction in "
+    "EVERY frame — NEVER mirror or flip. Keep the body, suit, and overall "
+    "composition IDENTICAL across all frames — only the mouth opening changes."
 )
 
 
 def _load_image_bytes(path: Path) -> bytes:
     with open(path, "rb") as f:
         return f.read()
+
+
+def _crop_right_subject(img: Image.Image) -> Image.Image:
+    """Remove reference-image bleed on the left if present, then center the subject.
+
+    Only crops the left portion if it detects a non-green-screen region there
+    (the Gemini reference photo leak). If the left side is clean green-screen,
+    the full image is preserved so we don't cut off the character's shoulders.
+    """
+    import numpy as np
+
+    arr = np.array(img.convert("RGBA"))
+    h, w = arr.shape[:2]
+    r, g, b = arr[:, :, 0].astype(float), arr[:, :, 1].astype(float), arr[:, :, 2].astype(float)
+
+    green_bg = (g > 180) & (r < 180) & (b < 180) & (g > r + 30) & (g > b + 30)
+
+    left_strip = green_bg[:, :int(w * 0.15)]
+    left_green_ratio = left_strip.sum() / max(left_strip.size, 1)
+
+    if left_green_ratio < 0.4:
+        crop_x = int(w * 0.35)
+        print(f"    Detected reference bleed on left ({left_green_ratio:.0%} green), cropping left {crop_x}px")
+        arr = arr[:, crop_x:]
+    else:
+        print(f"    Left side is clean green-screen ({left_green_ratio:.0%} green), no crop needed")
+
+    return Image.fromarray(arr, "RGBA")
 
 
 def _remove_green_screen(img: Image.Image, tolerance: int = 80) -> Image.Image:
@@ -121,6 +163,63 @@ def _make_reference_part(img_bytes: bytes, mime: str = "image/png") -> types.Par
     return types.Part.from_bytes(data=img_bytes, mime_type=mime)
 
 
+def _find_eye_side(img: Image.Image) -> str:
+    """Determine which side of the image the fish eye is on.
+
+    Looks for the darkest pixel cluster in the upper 60% of the image
+    (where the head is). Returns 'left' or 'right'.
+    """
+    import numpy as np
+
+    arr = np.array(img.convert("RGBA"))
+    h, w = arr.shape[:2]
+    upper = arr[:int(h * 0.6), :, :]
+
+    alpha = upper[:, :, 3]
+    has_content = alpha > 30
+
+    r, g, b = upper[:, :, 0].astype(float), upper[:, :, 1].astype(float), upper[:, :, 2].astype(float)
+    darkness = 255 * 3 - (r + g + b)
+    darkness[~has_content] = 0
+
+    threshold = np.percentile(darkness[has_content], 95) if has_content.any() else 500
+    dark_pixels = (darkness >= threshold) & has_content
+
+    if not dark_pixels.any():
+        return "left"
+
+    dark_xs = np.where(dark_pixels)[1]
+    content_xs = np.where(has_content)[1]
+    if len(content_xs) == 0:
+        return "left"
+
+    content_center = (content_xs.min() + content_xs.max()) / 2
+    avg_dark_x = dark_xs.mean()
+
+    return "left" if avg_dark_x < content_center else "right"
+
+
+def _ensure_consistent_direction(frames: dict[int, Image.Image]) -> dict[int, Image.Image]:
+    """Flip any frames whose eye is on the opposite side from mouth_0."""
+    if 0 not in frames:
+        return frames
+
+    ref_side = _find_eye_side(frames[0])
+    print(f"\n  mouth_0 eye detected on: {ref_side}")
+
+    for idx in sorted(frames.keys()):
+        if idx == 0:
+            continue
+        side = _find_eye_side(frames[idx])
+        if side != ref_side:
+            print(f"  mouth_{idx} eye on {side} (expected {ref_side}) — flipping horizontally")
+            frames[idx] = frames[idx].transpose(Image.FLIP_LEFT_RIGHT)
+        else:
+            print(f"  mouth_{idx} eye on {side} — consistent, no flip needed")
+
+    return frames
+
+
 def backup_existing_assets():
     """Copy current mouth frames to a backup directory."""
     if BACKUP_DIR.exists():
@@ -144,7 +243,7 @@ def generate_mouth_frames():
 
     client = genai.Client(api_key=api_key)
 
-    ref_fish_bytes = _load_image_bytes(MOUTH_DIR / "mouth_backup_fish" / "mouth_0.png")
+    ref_fish_bytes = _load_image_bytes(Path(__file__).parent / "puffernews_reference.png")
     ref_fish_part = _make_reference_part(ref_fish_bytes)
 
     generated_frames: dict[int, Image.Image] = {}
@@ -161,7 +260,7 @@ def generate_mouth_frames():
 
         content_parts.append(
             types.Part.from_text(
-                text="Reference image (original fish anchor — match this 3/4 SIDE PROFILE pose and news-anchor framing but use a KOI FISH with a female power-boss suit):"
+                text="Reference image for PROPORTIONS and STYLE ONLY — match this character's BIG HEAD, SHORT WIDE BODY proportions and vibrant fish coloring. Generate a NEW koi fish character with cobalt blue blazer, side-profile head with mouth pointing UP. Do NOT copy the background, desk, or text from this reference:"
             )
         )
         content_parts.append(ref_fish_part)
@@ -172,7 +271,7 @@ def generate_mouth_frames():
             mouth0_bytes = mouth0_buf.getvalue()
             content_parts.append(
                 types.Part.from_text(
-                    text="Generated koi fish mouth_0 (closed, side profile) — keep the character IDENTICAL, only change the mouth opening on the side:"
+                    text="This is mouth_0 (closed). Generate the EXACT SAME character facing the EXACT SAME direction (LEFT) with the IDENTICAL body, suit, and pose — ONLY change the mouth opening. Do NOT mirror or flip the character:"
                 )
             )
             content_parts.append(_make_reference_part(mouth0_bytes))
@@ -207,7 +306,8 @@ def generate_mouth_frames():
             print(f"  ERROR: Failed to generate mouth_{mouth_idx} after retry. Skipping.")
             continue
 
-        print(f"  Removing green-screen background...")
+        print(f"  Cropping right subject & removing green-screen...")
+        img = _crop_right_subject(img)
         img = _remove_green_screen(img)
         img_resized = img.resize(TARGET_SIZE, Image.LANCZOS)
         generated_frames[mouth_idx] = img_resized
@@ -217,6 +317,15 @@ def generate_mouth_frames():
         print(f"  Saved {out_path} ({img_resized.size})")
 
     print(f"\nGeneration complete. {len(generated_frames)}/{NUM_MOUTH_STATES} frames generated.")
+
+    print("\nStep 3: Ensuring consistent facing direction...")
+    generated_frames = _ensure_consistent_direction(generated_frames)
+
+    for idx, img in generated_frames.items():
+        out_path = MOUTH_DIR / f"mouth_{idx}.png"
+        img.save(out_path, "PNG")
+        print(f"  Saved {out_path} (direction-corrected)")
+
     if len(generated_frames) < NUM_MOUTH_STATES:
         missing = [i for i in range(NUM_MOUTH_STATES) if i not in generated_frames]
         print(f"  Missing frames: {missing}")
