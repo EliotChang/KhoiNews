@@ -105,7 +105,7 @@ def _score_narrative_flow(*, script_text: str) -> float:
     if lead_specific:
         flow += 0.15
     if ending_has_consequence:
-        flow += 0.15
+        flow += 0.25
     return round(max(0.0, min(1.0, flow)), 3)
 
 

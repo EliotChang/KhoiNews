@@ -87,6 +87,13 @@ DISALLOWED_PHRASES = (
     "太誇張",
     "震驚全場",
     "顛覆一切",
+    "只會越來越",
+    "正在邁向",
+    "目標是成為",
+    "趕快去",
+    "現在就去",
+    "你準備好了嗎",
+    "才剛開始",
 )
 NON_NEUTRAL_CUES = (
     "瘋狂",
@@ -455,15 +462,21 @@ def _has_specificity_anchor(value: str) -> bool:
     )
 
 
+_CJK_CONSEQUENCE_ANCHOR_RE = re.compile(
+    r"(?:將會|將|即將|必須|導致|造成|判|裁定|宣判|生效|截止"
+    r"|面臨|衝擊|永遠|再也|從此|等於|意味著|竟|卻|結果)"
+)
+
+
 def _has_consequence_anchor(value: str) -> bool:
     lowered = value.lower()
-    return bool(
-        re.search(
-            r"\b(?:will|starting|effective|deadline|requires|blocks|allows|bans|cuts|adds|"
-            r"raises|lowers|affect|changes|means)\b",
-            lowered,
-        )
-    )
+    if re.search(
+        r"\b(?:will|starting|effective|deadline|requires|blocks|allows|bans|cuts|adds|"
+        r"raises|lowers|affect|changes|means)\b",
+        lowered,
+    ):
+        return True
+    return bool(_CJK_CONSEQUENCE_ANCHOR_RE.search(value))
 
 
 _STAKES_NUMBER_PATTERN = re.compile(r"\b\d[\d,.]*\s*(?:million|billion|trillion|percent|%|people|workers|users|jobs|dollars)?\b")
@@ -526,7 +539,8 @@ def _is_script_substantive(*, script_text: str, source_signals: set[str], policy
     if not _has_specificity_anchor(lead_sentences):
         LOGGER.info("Script lacks specificity anchor in lead (soft-pass; core metrics met)")
     if sentences and not _has_consequence_anchor(sentences[-1]):
-        LOGGER.info("Script lacks consequence anchor in final sentence (soft-pass; core metrics met)")
+        LOGGER.info("Script lacks consequence anchor in final sentence — blocking")
+        return False
     return True
 
 
@@ -566,10 +580,10 @@ def _script_validation_issues(*, script_text: str, source_signals: set[str], pol
         else:
             LOGGER.info("Script lacks specificity anchor in lead (soft-warn; core metrics failed)")
     if sentences and not _has_consequence_anchor(sentences[-1]):
-        if core_metrics_pass:
-            LOGGER.info("Script lacks consequence anchor in final sentence (soft-warn; core metrics passed)")
-        else:
-            LOGGER.info("Script lacks consequence anchor in final sentence (soft-warn; core metrics failed)")
+        issues.append(
+            "final sentence lacks a concrete consequence, twist, or ironic reveal — "
+            "rewrite the ending with a specific fact that creates finality"
+        )
     if not _has_stakes_marker(script_text):
         LOGGER.info("Script lacks specific stakes (non-blocking); repair will attempt to add them")
     return issues
@@ -1042,18 +1056,24 @@ def generate_content_pack(
         "任何數字都要用快速比較讓觀眾秒懂。"
         "每個句子的轉場都要製造微型懸念，讓下一句話變得不可錯過。"
         "這段是整支影片的骨幹——如果解說無聊，觀眾就滑走了。\n\n"
-        "3）翻轉／亮點（30-35秒，1-2句，約15字）："
-        "用翻轉、揭露或重新框架作結，讓觀眾驚訝。"
-        "這個時刻要讓觀眾想重看或分享。"
-        "技巧：揭露意想不到的後果、翻轉常見假設、挖出來源中的隱藏細節、"
-        "點名具體受影響對象並說出觀眾沒想到的後果。"
+        "3）翻轉／亮點（30-35秒，1-2句，約15字）——結尾決定觀眾會不會分享：\n"
+        "最後一句話必須讓觀眾感覺故事已經「完結」，而不是「還有下文沒講完」。"
+        "觀眾聽完應該想「天啊」或「原來如此」，而不是「然後呢？」。"
+        "這是句號的感覺，不是省略號。\n\n"
+        "好的結尾公式：\n"
+        "  - 反諷揭露：揭露矛盾或荒謬。例：「校方調查竟稱查無離校證據。」\n"
+        "  - 截止線＋不可逆後果：具體日期＋錯過就沒了。例：「七月前不申請，這筆錢永遠拿不回來。」\n"
+        "  - 受害者＋意外衝擊：點名誰被影響、結果出乎意料。例：「四千兩百萬健保受益人七月一日起，自付額將調漲。」\n"
+        "  - 回力鏢：行動者被自己的決定反噬。例：「兩年後，幫你打包網購訂單的機器人，上面可能印著蘋果的商標。」\n\n"
+        "不好的結尾（絕對禁止）：\n"
+        "  - 開放式推測：「只會越來越多」「未來只會更嚴重」「包裹潮才剛開始」\n"
+        "  - 願景式空話：「目標是成為…」「正在邁向…」「直接升級成…」\n"
+        "  - 行動呼籲／廣告語氣：「現在就去更新」「趕快去申請」「今天就去做」\n"
+        "  - 結尾用問句：「你覺得呢？」「你準備好了嗎？」\n"
+        "  - 模糊預測：「這可能改變整個產業」「接下來會怎樣沒人知道」\n\n"
+        "結尾必須包含具體的翻轉或後果，帶有行動/時間語言。"
         "使用具體資訊——誰、什麼、什麼時候。"
-        "用最強的事實作結。\n\n"
-        "不好的結尾：「這可能改變整個產業。」\n"
-        "好的結尾：「四千兩百萬健保受益人七月一日起，自付額將調漲。」\n"
-        "不好的結尾：「機器人產業即將變得更競爭。」\n"
-        "好的結尾：「兩年後，幫你打包網購訂單的機器人，上面可能印著蘋果的商標。」\n"
-        "結尾必須包含具體的翻轉或後果，帶有行動/時間語言。\n"
+        "用最強的事實作結，讓觀眾感覺故事在這裡畫下句點。\n"
         "避免廢話、開場套路和公式化導語如「這很重要因為」。\n\n"
 
         f"至少包含{policy.min_facts}個來源中的具體事實。\n\n"
