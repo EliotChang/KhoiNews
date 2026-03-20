@@ -570,6 +570,24 @@ def clear_source_gate_failure(
         )
 
 
+def list_recent_source_post_titles(
+    conn: psycopg.Connection, *, lookback_hours: int = 72
+) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select title
+            from source_posts
+            where title is not null
+              and title != ''
+              and created_at > now() - make_interval(hours => %(hours)s)
+            order by created_at desc
+            """,
+            {"hours": lookback_hours},
+        )
+        return [str(row["title"]) for row in cur.fetchall()]
+
+
 def list_other_headlines_for_day(
     conn: psycopg.Connection,
     *,

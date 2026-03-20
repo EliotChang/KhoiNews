@@ -6,7 +6,15 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-DEFAULT_FALLBACK_FEED_URLS: list[str] = []
+DEFAULT_FALLBACK_FEED_URLS: list[str] = [
+    "https://feeds.reuters.com/reuters/worldNews",
+    "https://feeds.reuters.com/reuters/businessNews",
+    "https://feeds.apnews.com/apf-topnews",
+    "https://feeds.apnews.com/apf-politics",
+    "https://feeds.npr.org/1003/rss.xml",
+    "https://feeds.npr.org/1001/rss.xml",
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+]
 
 DEFAULT_WJ_CATEGORY_PATHS = [
     "/wj/cate/breaking",
@@ -24,9 +32,41 @@ DEFAULT_TOPIC_BLOCK_TERMS = [
     "工商",
     "訂閱",
     "促銷",
+    "review",
+    "reviews",
+    "hands-on",
+    "hands on",
+    "unboxing",
+    "first look",
+    "benchmark",
+    "benchmarks",
+    "camera test",
+    "vs.",
+    "comparison",
+    "compared",
+    "memoir",
+    "essay",
+    "literary",
+    "diary",
+    "thought exercise",
+    "new york review",
+    "paris review",
+    "breakfast",
 ]
 
-DEFAULT_SOURCE_DOMAIN_BLOCKLIST: list[str] = []
+DEFAULT_SOURCE_DOMAIN_BLOCKLIST: list[str] = [
+    "theverge.com",
+    "techradar.com",
+    "gsmarena.com",
+    "androidauthority.com",
+    "9to5google.com",
+    "9to5mac.com",
+    "engadget.com",
+    "tomsguide.com",
+    "cnet.com",
+    "mashable.com",
+    "pocket-lint.com",
+]
 
 def bootstrap_runtime_env() -> None:
     load_dotenv()
@@ -127,6 +167,9 @@ class Settings:
     topic_blocklist_enabled: bool
     topic_block_terms: list[str]
     source_domain_blocklist: list[str]
+    headline_dedup_enabled: bool
+    headline_dedup_similarity_threshold: float
+    headline_dedup_lookback_hours: int
     anthropic_model: str
     content_script_target_seconds: int
     content_script_target_words: int
@@ -342,7 +385,7 @@ def load_settings() -> Settings:
         wj_base_url=_optional_str_env("WJ_BASE_URL", "https://www.worldjournal.com"),
         wj_category_paths=_optional_csv_env("WJ_CATEGORY_PATHS", DEFAULT_WJ_CATEGORY_PATHS),
         content_language=_optional_str_env("CONTENT_LANGUAGE", "zh-TW"),
-        fallback_feeds_enabled=_optional_bool_env("FALLBACK_FEEDS_ENABLED", False),
+        fallback_feeds_enabled=_optional_bool_env("FALLBACK_FEEDS_ENABLED", True),
         fallback_feeds_world_first=_optional_bool_env("FALLBACK_FEEDS_WORLD_FIRST", True),
         fallback_feeds_max_posts=max(1, _optional_int_env("FALLBACK_FEEDS_MAX_POSTS", 25)),
         fallback_feed_urls=fallback_feed_urls,
@@ -351,6 +394,9 @@ def load_settings() -> Settings:
         topic_blocklist_enabled=_optional_bool_env("TOPIC_BLOCKLIST_ENABLED", True),
         topic_block_terms=topic_block_terms,
         source_domain_blocklist=source_domain_blocklist,
+        headline_dedup_enabled=_optional_bool_env("HEADLINE_DEDUP_ENABLED", True),
+        headline_dedup_similarity_threshold=float(_optional_str_env("HEADLINE_DEDUP_SIMILARITY_THRESHOLD", "0.45")),
+        headline_dedup_lookback_hours=max(1, _optional_int_env("HEADLINE_DEDUP_LOOKBACK_HOURS", 72)),
         anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-opus-4-6"),
         content_script_target_seconds=max(8, _optional_int_env("CONTENT_SCRIPT_TARGET_SECONDS", 35)),
         content_script_target_words=max(20, _optional_int_env("CONTENT_SCRIPT_TARGET_WORDS", 140)),

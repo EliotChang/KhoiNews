@@ -25,6 +25,7 @@ from pipeline.db import (
     list_published_links_for_platforms,
     list_recent_published_article_links,
     list_recent_series_tags,
+    list_recent_source_post_titles,
     record_source_gate_failure,
     update_content_asset_thumbnail,
     upsert_persona_profile,
@@ -57,6 +58,7 @@ from pipeline.wj_ingest import (
 from pipeline.metricool_analytics import fetch_and_store_metricool_analytics
 from pipeline.publish_quality import evaluate_publish_quality
 from pipeline.quality_feedback import SignalBoost, analyze_quality_performance_feedback, analyze_signal_performance
+from pipeline.rss_ingest import fetch_fallback_feed_posts
 from pipeline.video_gen import generate_fish_lipsync_video
 from pipeline.voice_gen import generate_elevenlabs_voice
 
@@ -123,6 +125,53 @@ _ENGAGEMENT_STOPWORDS = {
     "would", "there", "were", "where", "when", "what", "which", "while",
     "than", "then", "just", "more", "most", "very",
 }
+
+_HEADLINE_STOP_WORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+    "has", "have", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "its", "it", "this", "that", "as", "not",
+    "no", "so", "if", "up", "out", "about", "into", "over", "after",
+})
+
+_HEADLINE_CJK_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
+
+
+def _tokenize_headline(title: str) -> set[str]:
+    text = title.strip()
+    if not text:
+        return set()
+    if _HEADLINE_CJK_RE.search(text):
+        import jieba
+        tokens = set(jieba.cut(text))
+        tokens.discard("")
+        return {t for t in tokens if len(t) > 1}
+    words = set(re.split(r"[^a-z0-9]+", text.lower()))
+    words.discard("")
+    return words - _HEADLINE_STOP_WORDS
+
+
+def _headline_jaccard(a: str, b: str) -> float:
+    tokens_a = _tokenize_headline(a)
+    tokens_b = _tokenize_headline(b)
+    if not tokens_a or not tokens_b:
+        return 0.0
+    intersection = len(tokens_a & tokens_b)
+    union = len(tokens_a | tokens_b)
+    return intersection / union if union else 0.0
+
+
+def _find_similar_headline(
+    title: str,
+    recent_titles: list[str],
+    threshold: float,
+) -> str | None:
+    if not title or not recent_titles:
+        return None
+    for existing_title in recent_titles:
+        if _headline_jaccard(title, existing_title) >= threshold:
+            return existing_title
+    return None
 
 
 def _log_wj_config(*, wj_base_url: str) -> None:
@@ -1187,6 +1236,18 @@ def _process_ranked_posts_batch(
     def _record_skip(reason: str) -> None:
         skip_reason_counts[reason] += 1
 
+    headline_dedup_enabled = bool(getattr(settings, "headline_dedup_enabled", True))
+    headline_dedup_threshold = float(getattr(settings, "headline_dedup_similarity_threshold", 0.5))
+    headline_dedup_lookback = int(getattr(settings, "headline_dedup_lookback_hours", 72))
+    recent_titles: list[str] = []
+    batch_titles: list[str] = []
+    if headline_dedup_enabled:
+        try:
+            recent_titles = list_recent_source_post_titles(conn, lookback_hours=headline_dedup_lookback)
+            LOGGER.info("Headline dedup loaded %s recent titles (lookback=%sh)", len(recent_titles), headline_dedup_lookback)
+        except Exception as headline_load_err:  # noqa: BLE001
+            LOGGER.warning("Headline dedup: failed to load recent titles error=%s", headline_load_err)
+
     for post in ranked_posts:
         if posts_processed >= target_processed_posts:
             break
@@ -1246,6 +1307,21 @@ def _process_ranked_posts_batch(
                 )
                 continue
 
+            if headline_dedup_enabled and post.title:
+                all_titles_to_check = recent_titles + batch_titles
+                matched_title = _find_similar_headline(post.title, all_titles_to_check, headline_dedup_threshold)
+                if matched_title is not None:
+                    existing_posts_seen += 1
+                    _record_skip("duplicate_headline")
+                    LOGGER.info(
+                        "Skipping duplicate headline source=%s guid=%s title=%r matched=%r",
+                        post.source,
+                        post.source_guid,
+                        post.title,
+                        matched_title,
+                    )
+                    continue
+
             upserted = upsert_source_post(conn, post, force_recycle=force_recycle)
             if not upserted.is_new:
                 existing_posts_seen += 1
@@ -1253,6 +1329,8 @@ def _process_ranked_posts_batch(
                 LOGGER.info("Skipping existing post source=%s guid=%s", post.source, post.source_guid)
                 continue
             new_posts_seen += 1
+            if headline_dedup_enabled and post.title:
+                batch_titles.append(post.title)
 
             rss_description = str(post.description or "").strip()
             effective_description = rss_description
@@ -2030,11 +2108,36 @@ def _select_ranked_candidates_with_floor(
         ranked_posts.extend(primary_selected_posts)
 
         if selected_primary < floor_required_posts:
-            LOGGER.info(
-                "Primary candidates below floor (selected=%s floor=%s); no fallback feeds configured for WJ pipeline",
-                selected_primary,
-                floor_required_posts,
-            )
+            already_selected_guids = {p.source_guid for p in ranked_posts}
+            floor_candidates = [p for p in posts if p.source_guid not in already_selected_guids]
+            if floor_candidates:
+                floor_selected, floor_stats = select_top_headlines_with_engagement(
+                    posts=floor_candidates,
+                    settings=settings,
+                    candidate_origin="floor_backfill",
+                    top_n=floor_required_posts - selected_primary,
+                    min_score=engagement_floor_score,
+                    signal_boosts=signal_boosts,
+                )
+                for p in floor_selected:
+                    if isinstance(p.raw_payload, dict):
+                        p.raw_payload["floor_backfill_selected"] = True
+                ranked_posts.extend(floor_selected)
+                selected_fallback += len(floor_selected)
+                below_threshold_count += floor_stats["below_threshold_count"]
+                LOGGER.info(
+                    "Floor backfill: added %s posts at floor threshold %.2f (primary=%s floor=%s)",
+                    len(floor_selected),
+                    engagement_floor_score,
+                    selected_primary,
+                    floor_required_posts,
+                )
+            else:
+                LOGGER.info(
+                    "Primary candidates below floor (selected=%s floor=%s); no additional candidates for backfill",
+                    selected_primary,
+                    floor_required_posts,
+                )
     else:
         fallback_candidates = len(posts)
         fallback_selected_posts, fallback_scoring_stats = select_top_headlines_with_engagement(
@@ -2058,6 +2161,23 @@ def _select_ranked_candidates_with_floor(
         "selected_fallback": selected_fallback,
         "below_threshold_count": below_threshold_count,
     }
+
+
+def _ordered_fallback_feed_urls(*, feed_urls: list[str], world_first: bool) -> list[str]:
+    if not world_first:
+        return list(feed_urls)
+
+    def _priority(url: str) -> int:
+        host = urlparse(url).netloc.lower()
+        if "reuters" in host:
+            return 0
+        if "apnews" in host or host.endswith("ap.org"):
+            return 1
+        if "npr" in host:
+            return 2
+        return 3
+
+    return sorted(feed_urls, key=lambda url: (_priority(url), url))
 
 
 def _relaxed_media_quality_config(base: MediaQualityGateConfig) -> MediaQualityGateConfig:
@@ -2284,8 +2404,65 @@ def run_pipeline() -> None:
                 jobs_enqueued += safety_batch.jobs_enqueued
                 run_errors.extend(safety_batch.run_errors)
 
-            if posts_processed == 0:
-                LOGGER.info("Safety net: still 0 posts after force-reprocess; no fallback feeds in WJ pipeline")
+            if posts_processed == 0 and settings.fallback_feeds_enabled:
+                relaxed_mqc = _relaxed_media_quality_config(media_quality_config)
+                LOGGER.info(
+                    "Safety net: still 0 posts after force-reprocess; fetching fallback feeds with relaxed quality gate"
+                )
+                fallback_urls = _ordered_fallback_feed_urls(
+                    feed_urls=settings.fallback_feed_urls,
+                    world_first=settings.fallback_feeds_world_first,
+                )
+                try:
+                    safety_fallback_ingest = run_with_retry(
+                        lambda: fetch_fallback_feed_posts(
+                            rss_urls=fallback_urls,
+                            timeout_seconds=settings.request_timeout_seconds,
+                            max_posts=settings.fallback_feeds_max_posts,
+                        ),
+                        retries=2,
+                        base_sleep_seconds=0.8,
+                    )
+                    safety_fallback_posts, safety_blocked = _filter_blocked_posts(
+                        posts=safety_fallback_ingest.posts,
+                        topic_blocklist_enabled=settings.topic_blocklist_enabled,
+                        topic_block_terms=settings.topic_block_terms,
+                        source_domain_blocklist=settings.source_domain_blocklist,
+                    )
+                    if safety_blocked:
+                        LOGGER.info("Safety net fallback: blocked %s posts", safety_blocked)
+                    if safety_fallback_posts:
+                        safety_fallback_ranked, _ = select_top_headlines_with_engagement(
+                            posts=safety_fallback_posts,
+                            settings=settings,
+                            candidate_origin="safety_fallback",
+                            top_n=len(safety_fallback_posts),
+                            min_score=max(0.0, min(1.0, float(getattr(settings, "engagement_floor_score", 0.5)))),
+                            signal_boosts=cached_signal_boosts,
+                        )
+                        if safety_fallback_ranked:
+                            fallback_batch = _process_ranked_posts_batch(
+                                conn=conn,
+                                settings=settings,
+                                media_quality_config=relaxed_mqc,
+                                run_id=run_id,
+                                ranked_posts=safety_fallback_ranked,
+                                target_processed_posts=1,
+                                posts_processed_start=0,
+                                utc_schedule_anchor=utc_schedule_anchor,
+                                live_covered_links=_collect_live_covered_links(conn=conn, settings=settings),
+                                recent_series_tags=recent_series,
+                                force_recycle=True,
+                            )
+                            posts_processed += fallback_batch.posts_processed
+                            new_posts_seen += fallback_batch.new_posts_seen
+                            existing_posts_seen += fallback_batch.existing_posts_seen
+                            jobs_enqueued += fallback_batch.jobs_enqueued
+                            run_errors.extend(fallback_batch.run_errors)
+                except Exception as safety_fallback_error:  # noqa: BLE001
+                    LOGGER.warning("Safety net fallback feed fetch failed: %s", safety_fallback_error)
+            elif posts_processed == 0:
+                LOGGER.info("Safety net: still 0 posts after force-reprocess; fallback feeds disabled")
 
             if posts_processed == 0 and ranked_posts:
                 disabled_mqc = replace(media_quality_config, enabled=False)
