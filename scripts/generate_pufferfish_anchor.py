@@ -220,6 +220,78 @@ def _ensure_consistent_direction(frames: dict[int, Image.Image]) -> dict[int, Im
     return frames
 
 
+def _composite_mouth_region(base: Image.Image, open_mouth: Image.Image, feather_px: int = 12) -> Image.Image:
+    """Create an open-mouth frame by blending only the mouth region onto the base.
+
+    Computes the pixel difference between base (closed) and open_mouth,
+    finds the largest contiguous difference region (the mouth), creates a
+    feathered mask around it, and composites only that area from open_mouth
+    onto the base. Everything else (body, eye, suit) stays pixel-identical
+    to the base.
+    """
+    import numpy as np
+    from PIL import ImageFilter
+
+    base_arr = np.array(base.convert("RGBA"), dtype=np.float32)
+    open_arr = np.array(open_mouth.convert("RGBA"), dtype=np.float32)
+
+    if base_arr.shape != open_arr.shape:
+        open_mouth_resized = open_mouth.resize(base.size, Image.LANCZOS)
+        open_arr = np.array(open_mouth_resized.convert("RGBA"), dtype=np.float32)
+
+    diff = np.abs(base_arr[:, :, :3] - open_arr[:, :, :3]).mean(axis=2)
+
+    both_visible = (base_arr[:, :, 3] > 30) & (open_arr[:, :, 3] > 30)
+    diff[~both_visible] = 0
+
+    h, w = diff.shape
+
+    threshold = max(np.percentile(diff[both_visible], 85), 25) if both_visible.any() else 25
+    significant = diff > threshold
+
+    top_region = np.zeros_like(significant)
+    top_region[:int(h * 0.35), :] = True
+    mouth_mask = significant & top_region
+
+    if mouth_mask.sum() < 50:
+        print("    WARNING: Very small mouth diff detected, expanding search region")
+        mouth_mask = significant & np.ones_like(significant, dtype=bool)
+        mouth_mask[int(h * 0.5):, :] = False
+
+    if mouth_mask.sum() < 10:
+        print("    WARNING: No significant mouth region found, returning open_mouth as-is")
+        return open_mouth
+
+    rows_with_diff = np.where(mouth_mask.any(axis=1))[0]
+    cols_with_diff = np.where(mouth_mask.any(axis=0))[0]
+
+    pad = 20
+    y_min = max(0, rows_with_diff[0] - pad)
+    y_max = min(h, rows_with_diff[-1] + pad)
+    x_min = max(0, cols_with_diff[0] - pad)
+    x_max = min(w, cols_with_diff[-1] + pad)
+
+    mask_img = Image.new("L", (w, h), 0)
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(mask_img)
+    draw.rectangle([x_min, y_min, x_max, y_max], fill=255)
+
+    mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=feather_px))
+
+    mask_arr = np.array(mask_img, dtype=np.float32) / 255.0
+
+    result = base_arr.copy()
+    for c in range(4):
+        result[:, :, c] = base_arr[:, :, c] * (1 - mask_arr) + open_arr[:, :, c] * mask_arr
+
+    region_h = y_max - y_min
+    region_w = x_max - x_min
+    print(f"    Mouth region: ({x_min},{y_min})-({x_max},{y_max}) = {region_w}x{region_h}px, "
+          f"feather={feather_px}px, diff_pixels={mouth_mask.sum()}")
+
+    return Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGBA")
+
+
 def backup_existing_assets():
     """Copy current mouth frames to a backup directory."""
     if BACKUP_DIR.exists():
@@ -321,10 +393,21 @@ def generate_mouth_frames():
     print("\nStep 3: Ensuring consistent facing direction...")
     generated_frames = _ensure_consistent_direction(generated_frames)
 
+    if 0 in generated_frames:
+        print("\nStep 4: Compositing mouth regions onto base frame...")
+        for idx in sorted(generated_frames.keys()):
+            if idx == 0:
+                continue
+            print(f"  Compositing mouth_{idx} onto mouth_0 base...")
+            generated_frames[idx] = _composite_mouth_region(
+                base=generated_frames[0],
+                open_mouth=generated_frames[idx],
+            )
+
     for idx, img in generated_frames.items():
         out_path = MOUTH_DIR / f"mouth_{idx}.png"
         img.save(out_path, "PNG")
-        print(f"  Saved {out_path} (direction-corrected)")
+        print(f"  Saved {out_path} (final)")
 
     if len(generated_frames) < NUM_MOUTH_STATES:
         missing = [i for i in range(NUM_MOUTH_STATES) if i not in generated_frames]
