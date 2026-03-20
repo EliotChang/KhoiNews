@@ -120,7 +120,7 @@ jobs:
           CONTENT_LANGUAGE: "zh-TW"
           WJ_BASE_URL: ${{ secrets.WJ_BASE_URL || 'https://www.worldjournal.com' }}
           WJ_CATEGORY_PATHS: ${{ secrets.WJ_CATEGORY_PATHS || '/wj/cate/breaking,/wj/cate/breaking/121006,/wj/cate/breaking/121103,/wj/cate/breaking/121099,/wj/cate/breaking/121102' }}
-          FALLBACK_FEEDS_ENABLED: "false"
+          FALLBACK_FEEDS_ENABLED: ${{ secrets.FALLBACK_FEEDS_ENABLED || 'true' }}
           MAX_POSTS_PER_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.max_posts_per_run) || secrets.MAX_POSTS_PER_RUN || '25' }}
           TOP_HEADLINES_PER_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.top_headlines_per_run) || secrets.TOP_HEADLINES_PER_RUN || '3' }}
           ENGAGEMENT_SCORING_ENABLED: ${{ secrets.ENGAGEMENT_SCORING_ENABLED || 'true' }}
