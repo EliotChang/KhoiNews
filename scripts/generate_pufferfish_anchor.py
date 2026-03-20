@@ -220,14 +220,12 @@ def _ensure_consistent_direction(frames: dict[int, Image.Image]) -> dict[int, Im
     return frames
 
 
-def _composite_mouth_region(base: Image.Image, open_mouth: Image.Image, feather_px: int = 12) -> Image.Image:
-    """Create an open-mouth frame by blending only the mouth region onto the base.
+def _composite_mouth_region(base: Image.Image, open_mouth: Image.Image, feather_px: int = 4) -> Image.Image:
+    """Create an open-mouth frame by blending only the mouth pixels onto the base.
 
-    Computes the pixel difference between base (closed) and open_mouth,
-    finds the largest contiguous difference region (the mouth), creates a
-    feathered mask around it, and composites only that area from open_mouth
-    onto the base. Everything else (body, eye, suit) stays pixel-identical
-    to the base.
+    Uses a tight pixel-level diff mask (not a bounding rectangle) so only the
+    actual mouth-opening pixels come from open_mouth.  A small Gaussian feather
+    softens the boundary.  Everything outside the mask is pixel-identical to base.
     """
     import numpy as np
     from PIL import ImageFilter
@@ -246,48 +244,34 @@ def _composite_mouth_region(base: Image.Image, open_mouth: Image.Image, feather_
 
     h, w = diff.shape
 
-    threshold = max(np.percentile(diff[both_visible], 85), 25) if both_visible.any() else 25
+    threshold = max(np.percentile(diff[both_visible], 92), 30) if both_visible.any() else 30
     significant = diff > threshold
 
     top_region = np.zeros_like(significant)
     top_region[:int(h * 0.35), :] = True
-    mouth_mask = significant & top_region
+    mouth_pixels = significant & top_region
 
-    if mouth_mask.sum() < 50:
-        print("    WARNING: Very small mouth diff detected, expanding search region")
-        mouth_mask = significant & np.ones_like(significant, dtype=bool)
-        mouth_mask[int(h * 0.5):, :] = False
+    if mouth_pixels.sum() < 50:
+        mouth_pixels = significant.copy()
+        mouth_pixels[int(h * 0.5):, :] = False
 
-    if mouth_mask.sum() < 10:
+    if mouth_pixels.sum() < 10:
         print("    WARNING: No significant mouth region found, returning open_mouth as-is")
         return open_mouth
 
-    rows_with_diff = np.where(mouth_mask.any(axis=1))[0]
-    cols_with_diff = np.where(mouth_mask.any(axis=0))[0]
-
-    pad = 20
-    y_min = max(0, rows_with_diff[0] - pad)
-    y_max = min(h, rows_with_diff[-1] + pad)
-    x_min = max(0, cols_with_diff[0] - pad)
-    x_max = min(w, cols_with_diff[-1] + pad)
-
-    mask_img = Image.new("L", (w, h), 0)
-    from PIL import ImageDraw
-    draw = ImageDraw.Draw(mask_img)
-    draw.rectangle([x_min, y_min, x_max, y_max], fill=255)
-
+    mask_arr = mouth_pixels.astype(np.uint8) * 255
+    mask_img = Image.fromarray(mask_arr, "L")
     mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=feather_px))
-
-    mask_arr = np.array(mask_img, dtype=np.float32) / 255.0
+    mask_f = np.array(mask_img, dtype=np.float32) / 255.0
 
     result = base_arr.copy()
     for c in range(4):
-        result[:, :, c] = base_arr[:, :, c] * (1 - mask_arr) + open_arr[:, :, c] * mask_arr
+        result[:, :, c] = base_arr[:, :, c] * (1 - mask_f) + open_arr[:, :, c] * mask_f
 
-    region_h = y_max - y_min
-    region_w = x_max - x_min
-    print(f"    Mouth region: ({x_min},{y_min})-({x_max},{y_max}) = {region_w}x{region_h}px, "
-          f"feather={feather_px}px, diff_pixels={mouth_mask.sum()}")
+    affected = (mask_f > 0.01).sum()
+    print(f"    Mouth composite: {mouth_pixels.sum()} diff pixels, "
+          f"{affected} blended pixels ({affected / max(both_visible.sum(), 1) * 100:.1f}% of visible), "
+          f"feather={feather_px}px")
 
     return Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGBA")
 
