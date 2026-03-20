@@ -1471,7 +1471,9 @@ def _process_ranked_posts_batch(
                 )
 
             content = generate_content_pack(
-                api_key=settings.anthropic_api_key,
+                aws_access_key_id=settings.aws_access_key_id,
+                aws_secret_access_key=settings.aws_secret_access_key,
+                aws_region=settings.aws_region,
                 model_name=settings.anthropic_model,
                 title=post.title,
                 description=effective_description,
@@ -1546,7 +1548,9 @@ def _process_ranked_posts_batch(
                         title=post.title,
                         description=effective_description,
                         article_url=post.link,
-                        api_key=settings.anthropic_api_key,
+                        aws_access_key_id=settings.aws_access_key_id,
+                        aws_secret_access_key=settings.aws_secret_access_key,
+                        aws_region=settings.aws_region,
                         config=media_quality_config,
                     )
                 )
@@ -1658,7 +1662,9 @@ def _process_ranked_posts_batch(
                 failing_dimensions = set(quality_scores.failing_dimensions)
                 if {"ScriptSpecificityScore", "NarrativeFlowScore", "First2sHookScore"} & failing_dimensions:
                     content = generate_content_pack(
-                        api_key=settings.anthropic_api_key,
+                        aws_access_key_id=settings.aws_access_key_id,
+                        aws_secret_access_key=settings.aws_secret_access_key,
+                        aws_region=settings.aws_region,
                         model_name=settings.anthropic_model,
                         title=post.title,
                         description=effective_description,

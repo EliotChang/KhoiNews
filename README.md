@@ -39,7 +39,9 @@ Deterministic single-workflow pipeline for CloneFYI shorts.
   - `SUPABASE_VOICE_BUCKET`
   - `SUPABASE_VIDEO_BUCKET`
 - Generation:
-  - `ANTHROPIC_API_KEY`
+  - `AWS_ACCESS_KEY_ID`
+  - `AWS_SECRET_ACCESS_KEY`
+  - `AWS_REGION`
   - `ANTHROPIC_MODEL`
   - `ELEVENLABS_API_KEY`
   - `ELEVENLABS_VOICE_ID`

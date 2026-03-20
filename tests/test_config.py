@@ -12,7 +12,9 @@ def _base_env() -> dict[str, str]:
         "SUPABASE_SERVICE_ROLE_KEY": "service-role",
         "ELEVENLABS_API_KEY": "elevenlabs-key",
         "ELEVENLABS_VOICE_ID": "voice-id",
-        "ANTHROPIC_API_KEY": "anthropic-key",
+        "AWS_ACCESS_KEY_ID": "test-access-key",
+        "AWS_SECRET_ACCESS_KEY": "test-secret-key",
+        "AWS_REGION": "us-east-1",
     }
 
 

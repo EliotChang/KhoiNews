@@ -37,7 +37,7 @@ class ContentGenerationTests(unittest.TestCase):
 
         self.assertEqual(policy.target_seconds, 28)
         self.assertEqual(policy.target_words, 70)
-        self.assertEqual(policy.max_words, 160)
+        self.assertEqual(policy.max_words, 170)
 
     def test_sentence_splitter_preserves_abbreviations(self) -> None:
         text = "U.S. officials met U.K. ministers today. Markets reacted after the briefing."
@@ -58,9 +58,11 @@ class ContentGenerationTests(unittest.TestCase):
         self.assertTrue(any("too short" in issue for issue in issues))
 
     def test_fallback_output_is_still_validated_with_same_profile(self) -> None:
-        with patch("pipeline.content_gen.Anthropic", return_value=_FailingAnthropicClient()):
+        with patch("pipeline.content_gen.AnthropicBedrock", return_value=_FailingAnthropicClient()):
             result = generate_content_pack(
-                api_key="fake-key",
+                aws_access_key_id="fake-key",
+                aws_secret_access_key="fake-secret",
+                aws_region="us-east-1",
                 model_name="fake-model",
                 title="Funding round closes",
                 description="Series B closes after strong enterprise adoption.",

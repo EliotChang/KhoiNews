@@ -331,9 +331,13 @@ def _build_gemini_newsroom_prompt(*, title: str, script: str) -> str:
 
 
 def _build_image_search_query(*, settings: Settings, title: str) -> str:
-    from anthropic import Anthropic
+    from anthropic import AnthropicBedrock
 
-    client = Anthropic(api_key=settings.anthropic_api_key)
+    client = AnthropicBedrock(
+        aws_access_key=settings.aws_access_key_id,
+        aws_secret_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
+    )
     response = client.messages.create(
         model=settings.anthropic_model,
         temperature=0.3,

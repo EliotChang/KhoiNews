@@ -154,7 +154,9 @@ class Settings:
     elevenlabs_voice_stability: float
     elevenlabs_voice_similarity_boost: float
     elevenlabs_apply_text_normalization: bool
-    anthropic_api_key: str
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_region: str
     wj_base_url: str
     wj_category_paths: list[str]
     content_language: str
@@ -381,7 +383,9 @@ def load_settings() -> Settings:
         elevenlabs_voice_stability=elevenlabs_voice_stability,
         elevenlabs_voice_similarity_boost=elevenlabs_voice_similarity_boost,
         elevenlabs_apply_text_normalization=_optional_bool_env("ELEVENLABS_APPLY_TEXT_NORMALIZATION", True),
-        anthropic_api_key=_require_env("ANTHROPIC_API_KEY"),
+        aws_access_key_id=_require_env("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=_require_env("AWS_SECRET_ACCESS_KEY"),
+        aws_region=_optional_str_env("AWS_REGION", "us-east-1"),
         wj_base_url=_optional_str_env("WJ_BASE_URL", "https://www.worldjournal.com"),
         wj_category_paths=_optional_csv_env("WJ_CATEGORY_PATHS", DEFAULT_WJ_CATEGORY_PATHS),
         content_language=_optional_str_env("CONTENT_LANGUAGE", "zh-TW"),
@@ -397,7 +401,7 @@ def load_settings() -> Settings:
         headline_dedup_enabled=_optional_bool_env("HEADLINE_DEDUP_ENABLED", True),
         headline_dedup_similarity_threshold=float(_optional_str_env("HEADLINE_DEDUP_SIMILARITY_THRESHOLD", "0.45")),
         headline_dedup_lookback_hours=max(1, _optional_int_env("HEADLINE_DEDUP_LOOKBACK_HOURS", 72)),
-        anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-opus-4-6"),
+        anthropic_model=os.getenv("ANTHROPIC_MODEL", "anthropic.claude-opus-4-6-v1"),
         content_script_target_seconds=max(8, _optional_int_env("CONTENT_SCRIPT_TARGET_SECONDS", 35)),
         content_script_target_words=max(20, _optional_int_env("CONTENT_SCRIPT_TARGET_WORDS", 140)),
         content_script_max_words_buffer=max(0, _optional_int_env("CONTENT_SCRIPT_MAX_WORDS_BUFFER", 15)),
@@ -547,7 +551,7 @@ def load_settings() -> Settings:
         media_quality_min_entropy=_optional_float_env("MEDIA_QUALITY_MIN_ENTROPY", 4.0),
         media_quality_min_sharpness=_optional_float_env("MEDIA_QUALITY_MIN_SHARPNESS", 25.0),
         media_quality_require_llm_pass=_optional_bool_env("MEDIA_QUALITY_REQUIRE_LLM_PASS", True),
-        media_quality_llm_model=_optional_str_env("MEDIA_QUALITY_LLM_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-opus-4-6")),
+        media_quality_llm_model=_optional_str_env("MEDIA_QUALITY_LLM_MODEL", os.getenv("ANTHROPIC_MODEL", "anthropic.claude-opus-4-6-v1")),
         media_quality_llm_min_quality_score=_optional_float_env("MEDIA_QUALITY_LLM_MIN_QUALITY_SCORE", 0.45),
         media_quality_llm_min_relevance_score=_optional_float_env("MEDIA_QUALITY_LLM_MIN_RELEVANCE_SCORE", 0.5),
         media_quality_min_composite_score=_optional_float_env("MEDIA_QUALITY_MIN_COMPOSITE_SCORE", 0.50),

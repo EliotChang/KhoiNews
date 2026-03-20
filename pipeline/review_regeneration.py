@@ -92,7 +92,9 @@ def regenerate_metricool_publish_job(
         raise ValueError(f"Source post missing for publish job: {job_id}")
 
     content = generate_content_pack(
-        api_key=settings.anthropic_api_key,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        aws_region=settings.aws_region,
         model_name=settings.anthropic_model,
         title=source_post.title,
         description=source_post.description,

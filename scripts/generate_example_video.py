@@ -188,8 +188,10 @@ def main() -> None:
 
     LOGGER.info("=== Step 3: Generate Mandarin script ===")
     content = generate_content_pack(
-        api_key=_env("ANTHROPIC_API_KEY"),
-        model_name=_env("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
+        aws_access_key_id=_env("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=_env("AWS_SECRET_ACCESS_KEY"),
+        aws_region=_env("AWS_REGION", "us-east-1"),
+        model_name=_env("ANTHROPIC_MODEL", "anthropic.claude-opus-4-6-v1"),
         title=post.title,
         description=description,
         article_url=post.link,

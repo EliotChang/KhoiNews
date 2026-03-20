@@ -6,7 +6,7 @@ import json
 from io import BytesIO
 from typing import Any
 
-from anthropic import Anthropic
+from anthropic import AnthropicBedrock
 from PIL import Image, ImageFilter, ImageStat, UnidentifiedImageError
 import requests
 
@@ -223,11 +223,17 @@ def _llm_assessment(
     title: str,
     description: str,
     article_url: str,
-    api_key: str,
+    aws_access_key_id: str,
+    aws_secret_access_key: str,
+    aws_region: str,
     model_name: str,
 ) -> tuple[float | None, float | None, list[str]]:
     try:
-        client = Anthropic(api_key=api_key)
+        client = AnthropicBedrock(
+            aws_access_key=aws_access_key_id,
+            aws_secret_key=aws_secret_access_key,
+            aws_region=aws_region,
+        )
         mime_type = _mime_type_from_image_bytes(image_bytes)
         encoded_bytes = base64.b64encode(image_bytes).decode("utf-8")
         prompt = (
@@ -366,7 +372,9 @@ def enforce_image_quality_gate(
     title: str,
     description: str,
     article_url: str,
-    api_key: str,
+    aws_access_key_id: str,
+    aws_secret_access_key: str,
+    aws_region: str,
     config: MediaQualityGateConfig,
 ) -> ImageQualityGateResult:
     if not media_result:
@@ -441,7 +449,9 @@ def enforce_image_quality_gate(
                     title=title,
                     description=description,
                     article_url=article_url,
-                    api_key=api_key,
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key,
+                    aws_region=aws_region,
                     model_name=config.llm_model_name,
                 )
                 if "llm_assessment_failed" not in llm_reject_reasons:

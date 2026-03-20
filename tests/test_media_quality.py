@@ -90,7 +90,7 @@ class MediaQualityGateTests(unittest.TestCase):
         with (
             patch("pipeline.media_quality.requests.get", return_value=_MockHttpResponse(_png_bytes(width=1200, height=1200))),
             patch(
-                "pipeline.media_quality.Anthropic",
+                "pipeline.media_quality.AnthropicBedrock",
                 return_value=_MockAnthropicClient(payload={"quality_score": 0.92, "relevance_score": 0.9, "reject_reasons": []}),
             ),
         ):
@@ -99,7 +99,9 @@ class MediaQualityGateTests(unittest.TestCase):
                 title="Strong funding announcement",
                 description="Startup raises Series B and launches new platform.",
                 article_url="https://example.com/article",
-                api_key="fake-key",
+                aws_access_key_id="fake-key",
+                aws_secret_access_key="fake-secret",
+                aws_region="us-east-1",
                 config=_base_config(),
             )
 
@@ -128,7 +130,9 @@ class MediaQualityGateTests(unittest.TestCase):
                 title="Tiny image article",
                 description="Low quality content",
                 article_url="https://example.com/article-2",
-                api_key="fake-key",
+                aws_access_key_id="fake-key",
+                aws_secret_access_key="fake-secret",
+                aws_region="us-east-1",
                 config=_base_config(),
             )
 
@@ -164,7 +168,9 @@ class MediaQualityGateTests(unittest.TestCase):
                 title="Video-heavy article",
                 description="Bad fallback image",
                 article_url="https://example.com/article-3",
-                api_key="fake-key",
+                aws_access_key_id="fake-key",
+                aws_secret_access_key="fake-secret",
+                aws_region="us-east-1",
                 config=_base_config(),
             )
 

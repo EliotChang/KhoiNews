@@ -115,8 +115,10 @@ jobs:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID || 'WuLq5z7nEcrhppO0ZQJw' }}
           ELEVENLABS_TTS_MODEL_ID: "eleven_multilingual_v2"
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL || 'anthropic.claude-opus-4-6-v1' }}
           CONTENT_LANGUAGE: "zh-TW"
           WJ_BASE_URL: ${{ secrets.WJ_BASE_URL || 'https://www.worldjournal.com' }}
           WJ_CATEGORY_PATHS: ${{ secrets.WJ_CATEGORY_PATHS || '/wj/cate/breaking,/wj/cate/breaking/121006,/wj/cate/breaking/121103,/wj/cate/breaking/121099,/wj/cate/breaking/121102' }}

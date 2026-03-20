@@ -16,7 +16,9 @@ from pipeline.voice_gen import VoiceAssetResult
 
 def _settings(**overrides: object) -> SimpleNamespace:
     defaults = dict(
-        anthropic_api_key="anthropic-key",
+        aws_access_key_id="test-access-key",
+        aws_secret_access_key="test-secret-key",
+        aws_region="us-east-1",
         anthropic_model="model",
         content_script_target_seconds=24,
         content_script_target_words=80,

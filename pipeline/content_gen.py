@@ -7,7 +7,7 @@ import logging
 import re
 from urllib.parse import urlparse
 
-from anthropic import Anthropic
+from anthropic import AnthropicBedrock
 
 _CJK_CHAR_RE = re.compile(
     r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
@@ -34,14 +34,14 @@ YOUTUBE_LIMIT = 5000
 X_LIMIT = 280
 DEFAULT_SCRIPT_TARGET_SECONDS = 35
 DEFAULT_SCRIPT_TARGET_WORDS = 130
-DEFAULT_SCRIPT_MAX_WORDS_BUFFER = 15
+DEFAULT_SCRIPT_MAX_WORDS_BUFFER = 25
 DEFAULT_SCRIPT_MIN_FACTS = 3
 DEFAULT_SCRIPT_MIN_SENTENCES = 5
 DEFAULT_SCRIPT_MAX_SENTENCES = 8
 EDITORIAL_MIN_SECONDS = 28
 EDITORIAL_MAX_SECONDS = 38
 EDITORIAL_MIN_WORDS = 100
-EDITORIAL_MAX_WORDS = 150
+EDITORIAL_MAX_WORDS = 170
 EDITORIAL_MIN_SENTENCES = 5
 EDITORIAL_MAX_SENTENCES = 10
 VIDEO_TITLE_MAX_CHARS = 40
@@ -229,6 +229,22 @@ def _normalize_short_form_text(value: str) -> str:
     normalized = re.sub(r"!{2,}", "!", normalized)
     normalized = re.sub(r"\?{2,}", "?", normalized)
     return normalized
+
+
+_ENGLISH_PARENTHETICAL_RE = re.compile(
+    r"[（(]\s*[A-Za-z][A-Za-z\s\-''.]+\s*[)）]"
+)
+_BRACKET_ENGLISH_RE = re.compile(
+    r"[「『]\s*[A-Za-z][A-Za-z\s\-''.]+\s*[」』]"
+)
+
+
+def _strip_english_parentheticals(text: str) -> str:
+    """Remove English parenthetical glosses like (THAAD) or (Terminal High Altitude Area Defense)."""
+    cleaned = _ENGLISH_PARENTHETICAL_RE.sub("", text)
+    cleaned = _BRACKET_ENGLISH_RE.sub("", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
 
 
 def _remove_disallowed_phrases(value: str) -> str:
@@ -767,10 +783,12 @@ def _fallback_result(
     source_name: str = "",
 ) -> ContentGenerationResult:
     event_statement = _normalize_short_form_text(title).strip(" .。")
+    event_statement = _strip_english_parentheticals(event_statement)
     if not event_statement:
         event_statement = "一則重要新聞更新"
 
-    desc_sentences = _extract_sentences(description, limit=max(policy.max_sentences, policy.min_sentences + 1))
+    clean_description = _strip_english_parentheticals(description)
+    desc_sentences = _extract_sentences(clean_description, limit=max(policy.max_sentences, policy.min_sentences + 1))
     detail_sentences = [sentence.strip(" .") for sentence in desc_sentences if sentence.strip(" .")]
     detail_sentence = detail_sentences[0] if detail_sentences else event_statement
     closing_sentence = detail_sentences[1] if len(detail_sentences) >= 2 else ""
@@ -857,7 +875,7 @@ def _fallback_result(
 
 def _request_generation_payload(
     *,
-    client: Anthropic,
+    client: AnthropicBedrock,
     model_name: str,
     system_prompt: str,
     user_prompt: str,
@@ -936,7 +954,7 @@ def validate_script_for_profile(
 
 def _translate_script_to_english(
     *,
-    client: Anthropic,
+    client: AnthropicBedrock,
     model_name: str,
     chinese_script: str,
 ) -> str:
@@ -962,9 +980,30 @@ def _translate_script_to_english(
         return ""
 
 
+def _pick_best_candidate(
+    candidates: list[str],
+    *,
+    source_signals: set[str],
+    policy: ScriptPolicy,
+) -> str | None:
+    """Return the LLM candidate with the fewest validation issues, or None."""
+    scored: list[tuple[int, str]] = []
+    for c in candidates:
+        if not c.strip():
+            continue
+        issues = _script_validation_issues(script_text=c, source_signals=source_signals, policy=policy)
+        scored.append((len(issues), c))
+    if not scored:
+        return None
+    scored.sort(key=lambda pair: pair[0])
+    return scored[0][1]
+
+
 def generate_content_pack(
     *,
-    api_key: str,
+    aws_access_key_id: str,
+    aws_secret_access_key: str,
+    aws_region: str,
     model_name: str,
     title: str,
     description: str,
@@ -1007,7 +1046,11 @@ def generate_content_pack(
     )
     if fallback_issues:
         LOGGER.warning("Fallback script failed profile validation issues=%s", fallback_issues)
-    client = Anthropic(api_key=api_key)
+    client = AnthropicBedrock(
+        aws_access_key=aws_access_key_id,
+        aws_secret_key=aws_secret_access_key,
+        aws_region=aws_region,
+    )
 
     series_context = ""
     if recent_series_tags:
@@ -1171,8 +1214,19 @@ def generate_content_pack(
             prior_candidates.append(candidate_script)
             LOGGER.info("Repair script candidate attempt %s (%s words): %s", repair_attempt, _count_script_words(candidate_script), candidate_script)
     if not _is_script_substantive(script_text=candidate_script, source_signals=source_signals, policy=policy):
-        LOGGER.warning("Script still not substantive after %s repairs — falling back to title+description script", len(repair_temperatures))
-        candidate_script = fallback.script_10s
+        best_candidate = _pick_best_candidate(prior_candidates, source_signals=source_signals, policy=policy)
+        if best_candidate:
+            LOGGER.warning(
+                "Script still not substantive after %s repairs — using best LLM candidate instead of raw article fallback",
+                len(repair_temperatures),
+            )
+            candidate_script = best_candidate
+        else:
+            LOGGER.warning(
+                "Script still not substantive after %s repairs and no usable LLM candidates — falling back to title+description script",
+                len(repair_temperatures),
+            )
+            candidate_script = fallback.script_10s
 
     hashtags = payload.get("hashtags")
     if not isinstance(hashtags, list):

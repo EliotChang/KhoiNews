@@ -415,6 +415,17 @@ def _distribute_english_across_cues(
         enriched.append(new_cue)
     return enriched
 
+_ENGLISH_RUN_RE = re.compile(r"[（(][A-Za-z][A-Za-z\s\-''.]*[)）]")
+_LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\b")
+
+
+def _extract_cjk_only_text(text: str) -> str:
+    """Strip English parentheticals and long Latin runs, keeping CJK + numbers + punctuation."""
+    cleaned = _ENGLISH_RUN_RE.sub("", text)
+    cleaned = _LATIN_WORD_RE.sub("", cleaned)
+    cleaned = re.sub(r"\s+", "", cleaned)
+    return cleaned
+
 
 def build_aligned_caption_cues(
     *,
@@ -446,6 +457,20 @@ def build_aligned_caption_cues(
             alignment_tokens=alignment_tokens,
             min_coverage_ratio=min_alignment_coverage,
         )
+        if not aligned_words:
+            cjk_only_text = _extract_cjk_only_text(script_text)
+            if cjk_only_text and cjk_only_text != script_text:
+                LOGGER.info(
+                    "Retrying CJK alignment with English stripped (%d -> %d chars)",
+                    len(script_text),
+                    len(cjk_only_text),
+                )
+                relaxed_coverage = max(0.30, min_alignment_coverage * 0.5)
+                aligned_words = _build_word_alignments_cjk(
+                    script_text=cjk_only_text,
+                    alignment_tokens=alignment_tokens,
+                    min_coverage_ratio=relaxed_coverage,
+                )
     else:
         aligned_words = _build_word_alignments_latin(
             script_text=script_text,
