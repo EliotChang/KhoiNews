@@ -20,18 +20,27 @@ from google.genai import types
 from PIL import Image
 
 MOUTH_DIR = Path("pipeline/video_templates/fish_lipsync/public/mouth")
-BACKUP_DIR = MOUTH_DIR / "mouth_backup_v2"
+BACKUP_DIR = MOUTH_DIR / "mouth_backup_v3"
 TARGET_SIZE = (1300, 1042)
 MODEL = "gemini-3-pro-image-preview"
 NUM_MOUTH_STATES = 2
 
 MOUTH_STATES = {
-    0: "completely closed, jaw shut tight in profile view",
-    1: "slightly open, jaw dropped slightly showing a small gap on the side",
-    2: "moderately open, jaw clearly dropped with a visible opening on the side",
-    3: "wide open, jaw dropped wide showing the interior of the mouth from the side",
-    4: "very wide open, jaw gaping from the side",
-    5: "fully open, jaw dropped as far as possible in profile",
+    0: (
+        "completely closed — the mouth at the TOP of the head is SHUT TIGHT, "
+        "the upper and lower jaw are pressed firmly together forming a thin "
+        "sealed line at the very tip-top of the fish head. No gap visible."
+    ),
+    1: (
+        "clearly OPEN — the mouth at the VERY TOP of the head has the jaw "
+        "dropped WIDE, creating a LARGE visible dark gap/opening between the "
+        "upper and lower jaw at the topmost point of the fish head. The mouth "
+        "opening should be CLEARLY VISIBLE and OBVIOUS — big enough that a "
+        "viewer can instantly tell the mouth is open even at small sizes. "
+        "The dark interior of the mouth is visible through the gap. "
+        "ONLY the mouth at the top changes — the eye, body, and everything "
+        "else must be PIXEL-IDENTICAL to mouth_0."
+    ),
 }
 
 BASE_PROMPT = (
@@ -247,13 +256,15 @@ def _composite_mouth_region(base: Image.Image, open_mouth: Image.Image, feather_
     threshold = max(np.percentile(diff[both_visible], 92), 30) if both_visible.any() else 30
     significant = diff > threshold
 
-    top_region = np.zeros_like(significant)
-    top_region[:int(h * 0.35), :] = True
-    mouth_pixels = significant & top_region
+    top_mouth_region = np.zeros_like(significant)
+    top_mouth_region[:int(h * 0.22), :] = True
+    mouth_pixels = significant & top_mouth_region
 
-    if mouth_pixels.sum() < 50:
-        mouth_pixels = significant.copy()
-        mouth_pixels[int(h * 0.5):, :] = False
+    if mouth_pixels.sum() < 20:
+        top_region = np.zeros_like(significant)
+        top_region[:int(h * 0.35), :] = True
+        mouth_pixels = significant & top_region
+        print(f"    Expanded mouth search to top 35% (top 22% had <20 diff pixels)")
 
     if mouth_pixels.sum() < 10:
         print("    WARNING: No significant mouth region found, returning open_mouth as-is")
@@ -269,11 +280,156 @@ def _composite_mouth_region(base: Image.Image, open_mouth: Image.Image, feather_
         result[:, :, c] = base_arr[:, :, c] * (1 - mask_f) + open_arr[:, :, c] * mask_f
 
     affected = (mask_f > 0.01).sum()
-    print(f"    Mouth composite: {mouth_pixels.sum()} diff pixels, "
+    diff_rows = np.where(mouth_pixels.any(axis=1))[0]
+    print(f"    Mouth composite: {mouth_pixels.sum()} diff pixels in rows {diff_rows.min()}-{diff_rows.max()}, "
           f"{affected} blended pixels ({affected / max(both_visible.sum(), 1) * 100:.1f}% of visible), "
           f"feather={feather_px}px")
 
     return Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGBA")
+
+
+def _create_open_mouth_programmatic(base_path: Path, gap_px: int = 30) -> Image.Image:
+    """Create mouth_1 (open) from mouth_0 (closed) by darkening the lip seam.
+
+    Fish anatomy (left-facing side profile, mouth points UP):
+      Rows +0..+3  from top: upper lip tip (narrow, greenish)
+      Rows +4..+9:  upper lip body (pinkish flesh, widening)
+      Rows +9..+15: LIP SEAM -- where upper meets lower lip
+      Rows +15+:    lower jaw ridge (bright orange-red, widening)
+
+    We paint a large, heavily-darkened oval across the seam AND into the
+    upper jaw area so the "open" state is clearly visible even at 70% scale
+    in 1080px video.  No pixels move -- only color changes.
+    """
+    import numpy as np
+    from PIL import ImageFilter
+
+    base = Image.open(base_path).convert("RGBA")
+    arr = np.array(base, dtype=np.float32)
+    h, w = arr.shape[:2]
+    alpha = arr[:, :, 3]
+
+    top_visible = int(np.where(np.any(alpha > 30, axis=1))[0].min())
+
+    seam_top = top_visible + 3
+    seam_bot = top_visible + 22
+    seam_cy = (seam_top + seam_bot) // 2
+    seam_hh = (seam_bot - seam_top) // 2
+
+    mid_row = seam_cy
+    vis_mid = np.where(alpha[mid_row, :] > 30)[0]
+    if len(vis_mid) == 0:
+        print("    WARNING: No visible pixels at seam center, returning base as-is")
+        return base
+    fish_left = int(vis_mid.min())
+    fish_right = int(vis_mid.max())
+    fish_cx = (fish_left + fish_right) // 2
+    fish_width = fish_right - fish_left
+
+    oval_hw = max(int(fish_width * 0.85), 25)
+    oval_hh = seam_hh
+
+    print(f"    Lip seam: rows {seam_top}-{seam_bot} (cy={seam_cy}), "
+          f"fish width={fish_width}px, oval={oval_hw*2}x{oval_hh*2}")
+
+    interior_dark = np.array([20, 8, 8], dtype=np.float32)
+    interior_mid = np.array([45, 18, 15], dtype=np.float32)
+
+    mask = np.zeros((h, w), dtype=np.float32)
+    r_lo = max(0, seam_cy - oval_hh - 6)
+    r_hi = min(h, seam_cy + oval_hh + 6)
+    c_lo = max(0, fish_cx - oval_hw - 6)
+    c_hi = min(w, fish_cx + oval_hw + 6)
+
+    for r in range(r_lo, r_hi):
+        for col in range(c_lo, c_hi):
+            if alpha[r, col] < 20:
+                continue
+            dx = (col - fish_cx) / max(oval_hw, 1)
+            dy = (r - seam_cy) / max(oval_hh, 1)
+            dist_sq = dx * dx + dy * dy
+            if dist_sq > 2.0:
+                continue
+            if dist_sq <= 0.7:
+                mask[r, col] = 1.0
+            elif dist_sq <= 1.0:
+                mask[r, col] = 1.0 - (dist_sq - 0.7) / 0.3 * 0.1
+            else:
+                mask[r, col] = max(0.0, 0.9 * (1.0 - (dist_sq - 1.0) / 1.0))
+
+    mask_img = Image.fromarray((mask * 255).astype(np.uint8), "L")
+    mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=3))
+    mask = np.array(mask_img, dtype=np.float32) / 255.0
+
+    result = arr.copy()
+    for r in range(r_lo, r_hi):
+        for col in range(c_lo, c_hi):
+            m = mask[r, col]
+            if m < 0.01 or alpha[r, col] < 20:
+                continue
+            dx = (col - fish_cx) / max(oval_hw, 1)
+            dy = (r - seam_cy) / max(oval_hh, 1)
+            t = min(1.0, (dx * dx + dy * dy) ** 0.5)
+            interior = interior_dark * (1 - t) + interior_mid * t
+            result[r, col, :3] = arr[r, col, :3] * (1 - m * 0.95) + interior * (m * 0.95)
+
+    out = Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGBA")
+
+    out_arr = np.array(out)
+    base_arr = np.array(base)
+    diff_mask = np.any(np.abs(out_arr.astype(float) - base_arr.astype(float)) > 3, axis=-1)
+    diff_rows = np.where(diff_mask.any(axis=1))[0]
+    diff_cols = np.where(diff_mask.any(axis=0))[0]
+    print(f"    Result: {diff_mask.sum()} diff pixels in rows {diff_rows.min()}-{diff_rows.max()}, "
+          f"cols {diff_cols.min()}-{diff_cols.max()}")
+
+    return out
+
+
+def _slim_body(img: Image.Image, body_start_row: int = 280, factor: float = 0.85) -> Image.Image:
+    """Horizontally compress the body/suit below body_start_row to make it slimmer.
+
+    Keeps the head untouched.  Gradually ramps the compression from 1.0 at
+    body_start_row to `factor` over 150 rows, then holds constant.
+    """
+    import numpy as np
+
+    arr = np.array(img.convert("RGBA"))
+    h, w = arr.shape[:2]
+    alpha = arr[:, :, 3]
+
+    result = np.zeros_like(arr)
+    result[:body_start_row] = arr[:body_start_row]
+
+    ramp_rows = 150
+    for r in range(body_start_row, h):
+        vis = np.where(alpha[r, :] > 10)[0]
+        if len(vis) == 0:
+            continue
+        left, right = int(vis.min()), int(vis.max())
+        cx = (left + right) / 2.0
+        old_hw = (right - left) / 2.0
+
+        progress = min(1.0, (r - body_start_row) / ramp_rows)
+        row_factor = 1.0 - progress * (1.0 - factor)
+        new_hw = old_hw * row_factor
+
+        for col in range(w):
+            if alpha[r, col] < 10:
+                continue
+            offset = col - cx
+            src_offset = offset / row_factor
+            src_col = cx + src_offset
+            src_col_i = int(src_col)
+            frac = src_col - src_col_i
+            if 0 <= src_col_i < w - 1:
+                result[r, col] = arr[r, src_col_i] * (1 - frac) + arr[r, src_col_i + 1] * frac
+            elif src_col_i == w - 1:
+                result[r, col] = arr[r, src_col_i]
+
+    out = Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGBA")
+    print(f"    Slimmed body: factor={factor}, ramp from row {body_start_row}")
+    return out
 
 
 def backup_existing_assets():
@@ -327,7 +483,14 @@ def generate_mouth_frames():
             mouth0_bytes = mouth0_buf.getvalue()
             content_parts.append(
                 types.Part.from_text(
-                    text="This is mouth_0 (closed). Generate the EXACT SAME character facing the EXACT SAME direction (LEFT) with the IDENTICAL body, suit, and pose — ONLY change the mouth opening. Do NOT mirror or flip the character:"
+                    text=(
+                        "This is mouth_0 (closed). Generate the EXACT SAME character "
+                        "facing the EXACT SAME direction (LEFT) with the IDENTICAL body, "
+                        "suit, necklace, eye, scales, and pose — the ONLY difference is "
+                        "the mouth at the VERY TOP of the head is now OPEN with a visible "
+                        "dark gap. The eye MUST NOT change at all. Everything below the "
+                        "mouth (scales, eye, gill, jaw line) must be PIXEL-IDENTICAL:"
+                    )
                 )
             )
             content_parts.append(_make_reference_part(mouth0_bytes))
@@ -399,15 +562,86 @@ def generate_mouth_frames():
         print("  Re-run the script or manually create the missing frames.")
 
 
+def generate_mouth_frames_programmatic():
+    """Generate mouth_0 via Gemini, then create mouth_1 programmatically."""
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("ERROR: GEMINI_API_KEY not set in environment or .env")
+        sys.exit(1)
+
+    client = genai.Client(api_key=api_key)
+    ref_fish_bytes = _load_image_bytes(Path(__file__).parent / "puffernews_reference.png")
+    ref_fish_part = _make_reference_part(ref_fish_bytes)
+
+    mouth_desc = MOUTH_STATES[0]
+    print(f"\n--- Generating mouth_0 ({mouth_desc[:60]}...) via Gemini ---")
+
+    prompt = f"{BASE_PROMPT}\n\nThe mouth is {mouth_desc}.\n"
+    content_parts: list[types.Part] = [types.Part.from_text(text=prompt)]
+    content_parts.append(
+        types.Part.from_text(
+            text="Reference image for PROPORTIONS and STYLE ONLY — match this character's BIG HEAD, SHORT WIDE BODY proportions and vibrant fish coloring. Generate a NEW koi fish character with cobalt blue blazer, side-profile head with mouth pointing UP. Do NOT copy the background, desk, or text from this reference:"
+        )
+    )
+    content_parts.append(ref_fish_part)
+
+    contents = [types.Content(role="user", parts=content_parts)]
+    config = types.GenerateContentConfig(response_modalities=["IMAGE"], temperature=0.4)
+    response = client.models.generate_content(model=MODEL, contents=contents, config=config)
+    img = _extract_image_from_response(response)
+
+    if img is None:
+        print("  Retrying with higher temperature...")
+        config = types.GenerateContentConfig(response_modalities=["IMAGE"], temperature=0.8)
+        response = client.models.generate_content(model=MODEL, contents=contents, config=config)
+        img = _extract_image_from_response(response)
+
+    if img is None:
+        print("  ERROR: Failed to generate mouth_0. Exiting.")
+        sys.exit(1)
+
+    img = _crop_right_subject(img)
+    img = _remove_green_screen(img)
+    img = img.resize(TARGET_SIZE, Image.LANCZOS)
+
+    mouth0_path = MOUTH_DIR / "mouth_0.png"
+    img.save(mouth0_path, "PNG")
+    print(f"  Saved {mouth0_path} ({img.size})")
+
+    print("\n--- Creating mouth_1 programmatically from mouth_0 ---")
+    mouth1 = _create_open_mouth_programmatic(mouth0_path)
+    mouth1_path = MOUTH_DIR / "mouth_1.png"
+    mouth1.save(mouth1_path, "PNG")
+    print(f"  Saved {mouth1_path} ({mouth1.size})")
+
+
 def main():
     os.chdir(Path(__file__).resolve().parent.parent)
     print("=== Koi Fish Anchor Generation ===\n")
 
+    use_programmatic = "--programmatic" in sys.argv or "-p" in sys.argv
+    do_slim = "--slim" in sys.argv or "-s" in sys.argv
+
     print("Step 1: Backing up existing mouth frames...")
     backup_existing_assets()
 
-    print("\nStep 2: Generating koi fish mouth frames via Gemini...")
-    generate_mouth_frames()
+    if do_slim and (MOUTH_DIR / "mouth_0.png").exists():
+        print("\nStep 2a: Slimming body on mouth_0...")
+        from PIL import Image as _Img
+        m0 = _slim_body(_Img.open(MOUTH_DIR / "mouth_0.png").convert("RGBA"))
+        m0.save(MOUTH_DIR / "mouth_0.png", "PNG")
+        print(f"  Saved slimmed mouth_0.png")
+
+    if use_programmatic and (MOUTH_DIR / "mouth_0.png").exists():
+        print("\nStep 2b: Creating mouth_1 programmatically from mouth_0...")
+        mouth1 = _create_open_mouth_programmatic(MOUTH_DIR / "mouth_0.png")
+        mouth1_path = MOUTH_DIR / "mouth_1.png"
+        mouth1.save(mouth1_path, "PNG")
+        print(f"  Saved {mouth1_path}")
+    else:
+        print("\nStep 2: Generating mouth_0 via Gemini + mouth_1 programmatically...")
+        generate_mouth_frames_programmatic()
 
     print("\nDone! Check the mouth frames at:")
     print(f"  {MOUTH_DIR.resolve()}")

@@ -105,7 +105,7 @@ def _generate_voice_local(text: str, post_id: str) -> tuple[bytes, dict | None, 
             payload = resp.json()
             import base64
             audio_bytes = base64.b64decode(payload["audio_base64"])
-            alignment = payload.get("alignment")
+            alignment = payload.get("normalized_alignment") or payload.get("alignment")
             LOGGER.info("ElevenLabs with-timestamps succeeded, %d bytes", len(audio_bytes))
     except Exception as e:
         LOGGER.warning("with-timestamps call failed: %s", e)
@@ -213,6 +213,7 @@ def main() -> None:
 
     LOGGER.info("=== Step 5: Render video with Remotion ===")
     from pipeline.config import load_settings
+    os.environ["VIDEO_SHOW_DEBUG"] = "true"
     settings = load_settings()
 
     from pipeline.video_gen import generate_fish_lipsync_video

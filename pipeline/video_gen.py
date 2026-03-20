@@ -937,16 +937,18 @@ def _build_caption_cues(
 _MOUTH_CUE_MERGE_GAP_SECONDS = 0.08
 _CJK_VOICED_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\w]")
 _CJK_CHAR_RE_VIDEO = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
-_SYLLABLE_OPEN_RATIO = 0.55
-_MIN_SYLLABLE_OPEN_SECONDS = 0.06
-_MIN_CUE_HOLD_SECONDS = 0.05
+_SYLLABLE_OPEN_RATIO = 0.65
+_MIN_SYLLABLE_OPEN_SECONDS = 0.12
+_MIN_CUE_HOLD_SECONDS = 0.10
 _MIN_CLOSED_GAP_SECONDS = 0.04
+_INTER_SYLLABLE_CLOSED_SECONDS = 0.10
 
 
 def _build_mouth_cues_from_alignment(
     *,
     alignment_payload: dict[str, Any],
     voice_start_seconds: float,
+    script_text: str = "",
 ) -> list[dict[str, float]]:
     characters, starts, ends = _extract_character_timing(alignment_payload)
     if not characters:
@@ -958,7 +960,16 @@ def _build_mouth_cues_from_alignment(
         return []
 
     voiced_intervals: list[tuple[float, float]] = []
-    is_cjk_dominant = sum(1 for c in characters if _CJK_CHAR_RE_VIDEO.match(c)) > len(characters) * 0.3
+    source_for_cjk_check = script_text if script_text else "".join(characters)
+    cjk_count = sum(1 for c in source_for_cjk_check if _CJK_CHAR_RE_VIDEO.match(c))
+    is_cjk_dominant = cjk_count > len(source_for_cjk_check) * 0.3
+    LOGGER.info(
+        "Mouth cue CJK detection: source=%s cjk_chars=%d total=%d is_cjk=%s",
+        "script" if script_text else "alignment",
+        cjk_count,
+        len(source_for_cjk_check),
+        is_cjk_dominant,
+    )
 
     for idx, char in enumerate(characters):
         if not _CJK_VOICED_RE.match(char):
@@ -991,29 +1002,54 @@ def _build_mouth_cues_from_alignment(
 
         if not raw_cues:
             return []
-        merged_cjk: list[tuple[float, float]] = [raw_cues[0]]
-        for cue_start, cue_end in raw_cues[1:]:
-            prev_start, prev_end = merged_cjk[-1]
-            if cue_start - prev_end <= _MIN_CLOSED_GAP_SECONDS:
-                merged_cjk[-1] = (prev_start, max(prev_end, cue_end))
+
+        final_cjk: list[tuple[float, float]] = []
+        for cue_start, cue_end in raw_cues:
+            if not final_cjk:
+                final_cjk.append((cue_start, cue_end))
+                continue
+            prev_start, prev_end = final_cjk[-1]
+            gap = cue_start - prev_end
+            if gap < 0.02:
+                if cue_end - prev_end >= _INTER_SYLLABLE_CLOSED_SECONDS:
+                    forced_start = prev_end + _INTER_SYLLABLE_CLOSED_SECONDS
+                    if cue_end > forced_start + _MIN_CUE_HOLD_SECONDS:
+                        final_cjk.append((round(forced_start, 3), round(cue_end, 3)))
+                    else:
+                        final_cjk.append((cue_start, cue_end))
+                else:
+                    final_cjk[-1] = (prev_start, max(prev_end, cue_end))
             else:
-                merged_cjk.append((cue_start, cue_end))
+                final_cjk.append((cue_start, cue_end))
 
         final_cjk = [
             (s, e)
-            for s, e in merged_cjk
+            for s, e in final_cjk
             if e - s >= _MIN_CUE_HOLD_SECONDS
         ]
         if final_cjk:
             durations_ms = [(e - s) * 1000 for s, e in final_cjk]
-            LOGGER.debug(
-                "Mouth cues: %d raw -> %d merged -> %d final (avg %.0fms, min %.0fms, max %.0fms)",
+            gaps_ms = [
+                (final_cjk[i + 1][0] - final_cjk[i][1]) * 1000
+                for i in range(len(final_cjk) - 1)
+            ]
+            LOGGER.info(
+                "Mouth cues: %d raw -> %d final | "
+                "open avg %.0fms min %.0fms max %.0fms | "
+                "gap avg %.0fms min %.0fms max %.0fms",
                 len(raw_cues),
-                len(merged_cjk),
                 len(final_cjk),
                 sum(durations_ms) / len(durations_ms),
                 min(durations_ms),
                 max(durations_ms),
+                sum(gaps_ms) / len(gaps_ms) if gaps_ms else 0,
+                min(gaps_ms) if gaps_ms else 0,
+                max(gaps_ms) if gaps_ms else 0,
+            )
+            sample = final_cjk[:5]
+            LOGGER.info(
+                "Mouth cues sample: %s",
+                ", ".join(f"[{s:.3f}-{e:.3f} ({(e-s)*1000:.0f}ms)]" for s, e in sample),
             )
         return [{"startSec": s, "endSec": e} for s, e in final_cjk]
 
@@ -1317,6 +1353,7 @@ def generate_fish_lipsync_video(
             mouth_cues = _build_mouth_cues_from_alignment(
                 alignment_payload=voice_alignment,
                 voice_start_seconds=voice_start_seconds,
+                script_text=script_text or "",
             )
             if mouth_cues:
                 LOGGER.info(
